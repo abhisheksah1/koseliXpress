@@ -107,7 +107,7 @@ export function createDefaultState(): DatabaseState {
             id: 'sec-banner',
             type: 'banner',
             data: {
-              scriptTitle: 'Bloom',
+              scriptTitle: 'Celebrate',
               boldSubtitle: 'SAME DAY DELIVERY',
               title: 'Premium flowers & gifts across Nepal',
               subtitle: 'Fresh bouquets, gourmet cakes, and curated hampers — hand-delivered with love.',

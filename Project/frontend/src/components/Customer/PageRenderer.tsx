@@ -48,7 +48,7 @@ export default function PageRenderer({
           
           /* SECTION: PURPLE GIFT-SHOP HERO (reference layout) */
           case 'banner': {
-            const scriptTitle = (data as any).scriptTitle || 'Bloom';
+            const scriptTitle = (data as any).scriptTitle || 'Celebrate';
             const boldSubtitle = (data as any).boldSubtitle || 'SAME DAY DELIVERY';
             const heroNavLinks: string[] = (data as any).heroNavLinks || ['FLOWER DELIVERY', 'ALL GIFT ITEMS', 'FRESH FLOWER', 'CAKES'];
             const pillTags: string[] = (data as any).pillTags || ['All Over Nepal', 'Fresh Flowers | Long Life Flowers'];
