@@ -6,7 +6,7 @@ import nodemailer from 'nodemailer';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { connectDB } from './config/db.js';
+import { connectDB, isMongoConnected } from './config/db.js';
 import { getApiStore, saveApiStore } from './services/apiStoreService.js';
 import { getAppState } from './services/appStateService.js';
 import { seedPaymentGatewaysFromEnv } from './services/paymentGatewayService.js';
@@ -65,8 +65,23 @@ const ai = new GoogleGenAI({
 });
 
 // Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', time: new Date().toISOString(), database: 'mongodb' });
+app.get('/api/health', async (_req, res) => {
+  const store = await getAppState();
+  res.json({
+    status: 'ok',
+    time: new Date().toISOString(),
+    database: isMongoConnected() ? 'mongodb' : 'local-store',
+    mongoConnected: isMongoConnected(),
+    offlineLocalStore: !isMongoConnected(),
+    counts: {
+      pages: Array.isArray(store?.pages) ? store.pages.length : 0,
+      products: Array.isArray(store?.products) ? store.products.length : 0,
+      activeProducts: Array.isArray(store?.products)
+        ? store.products.filter((product: any) => product?.status === 'active').length
+        : 0,
+      categories: Array.isArray(store?.categories) ? store.categories.length : 0,
+    },
+  });
 });
 
 // Super admin seed status (verify MongoDB has seeded credentials)
@@ -1562,12 +1577,23 @@ app.post('/api/v1/orders', async (req, res) => {
 });
 
 async function start() {
-  await connectDB();
-  await seedSuperAdmin();
+  const mongoConnected = await connectDB();
+  if (mongoConnected) {
+    await seedSuperAdmin();
+  } else {
+    console.warn('[Startup] Skipping MongoDB-only super admin seed while running in offline local-store mode.');
+  }
   await seedPaymentGatewaysFromEnv();
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Koseli Xpress API running at http://0.0.0.0:${PORT}`);
+  const server = app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Koseli Xpress API running at http://0.0.0.0:${PORT}${mongoConnected ? '' : ' (offline local-store mode)'}`);
+  });
+  server.on('error', (err: NodeJS.ErrnoException) => {
+    if (err.code === 'EADDRINUSE') {
+      console.warn(`Koseli Xpress API port ${PORT} is already in use. Keeping the existing server running.`);
+      return;
+    }
+    throw err;
   });
 }
 

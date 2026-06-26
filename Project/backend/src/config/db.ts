@@ -17,7 +17,11 @@ function normalizeMongoUri(uri: string): string {
   return trimmed;
 }
 
-export async function connectDB(): Promise<void> {
+export function isMongoConnected(): boolean {
+  return mongoose.connection.readyState === 1;
+}
+
+export async function connectDB(): Promise<boolean> {
   const rawUri = process.env.MONGODB_URI || `mongodb://localhost:27017/${DEFAULT_DB_NAME}`;
   const uri = normalizeMongoUri(rawUri);
 
@@ -27,11 +31,12 @@ export async function connectDB(): Promise<void> {
     });
     const dbName = mongoose.connection.db?.databaseName || DEFAULT_DB_NAME;
     console.log(`MongoDB connected: ${uri.replace(/\/\/.*@/, '//***@')} (database: ${dbName})`);
+    return true;
   } catch (error) {
     console.error('MongoDB connection error:', error);
     console.error(
-      '\nEnsure MongoDB is running locally (mongod) or set MONGODB_URI in .env to a valid Atlas connection string.\n'
+      '\nMongoDB is unavailable. Starting API in offline local-store mode; admin/customer sync will use local files until MongoDB reconnects.\n'
     );
-    throw error;
+    return false;
   }
 }

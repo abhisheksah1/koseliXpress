@@ -2,7 +2,7 @@ import { DatabaseState, Role } from './types';
 import { createDefaultState } from './defaultState';
 import { buildEnvAdminUser, getEnvAdminCredentials } from './utils/adminAuth';
 
-const DB_KEY = 'koseli_xpress_db';
+export const DB_KEY = 'koseli_xpress_db';
 
 async function persistToMongoDB(state: DatabaseState): Promise<void> {
   try {
@@ -21,18 +21,18 @@ async function persistToMongoDB(state: DatabaseState): Promise<void> {
 
 export async function loadDbState(): Promise<DatabaseState> {
   try {
-    const res = await fetch('/api/store');
+    const res = await fetch(`/api/store?ts=${Date.now()}`, { cache: 'no-store' });
     if (res.ok) {
       const remote = (await res.json()) as DatabaseState;
-      localStorage.setItem(DB_KEY, JSON.stringify(remote));
-      return applyMigrations(remote);
+      const migratedRemote = applyMigrations(remote);
+      localStorage.setItem(DB_KEY, JSON.stringify(migratedRemote));
+      return migratedRemote;
     }
   } catch (err) {
     console.warn('Could not load from MongoDB, using local defaults:', err);
   }
 
   const local = getDbState();
-  await persistToMongoDB(local);
   return local;
 }
 
@@ -72,7 +72,60 @@ function ensureEnvAdminInUsers(parsed: DatabaseState): boolean {
   return updated;
 }
 
-function applyMigrations(parsed: DatabaseState): DatabaseState {
+function removeLegacySeededStorefrontContent(parsed: DatabaseState): boolean {
+  if (!parsed.pages || parsed.pages.length === 0) return false;
+
+  const legacyStaticSectionIds = new Set([
+    'sec-banner',
+    'sec-trust',
+    'sec-cats',
+    'sec-products',
+    'sec-story',
+    'sec-features',
+    'sec-faq',
+    'sec-cta',
+  ]);
+  const legacyStaticMarkers = new Set([
+    'Celebrate',
+    'SAME DAY DELIVERY',
+    'Premium flowers & gifts across Nepal',
+    'Shop by Category',
+    'Featured Gifts',
+    'Crafted with Intention, Delivered with Care',
+    'The Koseli Difference',
+    'Questions & Answers',
+    "Ready to Make Someone's Day?",
+  ]);
+
+  let changed = false;
+  parsed.pages = parsed.pages.map((page) => {
+    if (page.id !== 'page-home' && page.slug !== 'home') return page;
+
+    const filteredSections = (page.sections || []).filter((section: any) => {
+      const data = section.data || {};
+      const markers = [
+        data.scriptTitle,
+        data.boldSubtitle,
+        data.title,
+      ].filter(Boolean);
+      const looksLikeLegacyStatic =
+        legacyStaticSectionIds.has(section.id) &&
+        markers.some((marker) => legacyStaticMarkers.has(String(marker)));
+
+      if (looksLikeLegacyStatic) {
+        changed = true;
+        return false;
+      }
+      return true;
+    });
+
+    return { ...page, sections: filteredSections };
+  });
+
+  return changed;
+}
+
+function applyMigrations(parsed: DatabaseState, persistChanges = true): DatabaseState {
   const defaults = createDefaultState();
   let changed = false;
 
@@ -163,9 +216,13 @@ function applyMigrations(parsed: DatabaseState): DatabaseState {
     });
   }
 
+  changed = removeLegacySeededStorefrontContent(parsed) || changed;
+
   if (changed) {
     localStorage.setItem(DB_KEY, JSON.stringify(parsed));
-    void persistToMongoDB(parsed);
+    if (persistChanges) {
+      void persistToMongoDB(parsed);
+    }
   }
 
   return parsed;
@@ -180,7 +237,7 @@ export function getDbState(): DatabaseState {
   }
   try {
     const parsed = JSON.parse(data) as DatabaseState;
-    return applyMigrations(parsed);
+    return applyMigrations(parsed, false);
   } catch {
     console.error('Failed to parse DB, resetting.');
     const fresh = createDefaultState();

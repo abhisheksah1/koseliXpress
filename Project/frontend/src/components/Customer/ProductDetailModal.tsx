@@ -3,6 +3,14 @@ import { Product, DatabaseState, CurrencySettings, Review, ProductStatus } from 
 import { X, Star, Sparkles, Send, ShoppingBasket, Upload, Trash2 } from 'lucide-react';
 import { getProductStock, isProductOutOfStock, isProductOutOfStockForCustomer, isProductLowStockForCustomer } from '../../utils/stockUtils';
 
+const fallbackProductImage = 'https://images.unsplash.com/photo-154946?q=80&w=600&auto=format&fit=crop';
+
+function cleanImageUrl(url?: string): string {
+  const cleaned = (url || '').replace(/&amp;/g, '&').trim();
+  if (!cleaned) return fallbackProductImage;
+  return cleaned.startsWith('//') ? `https:${cleaned}` : cleaned;
+}
+
 interface ProductDetailModalProps {
   productId: string;
   state: DatabaseState;
@@ -48,13 +56,13 @@ export default function ProductDetailModal({
 
   const resolvedImages = React.useMemo(() => {
     const base = product.images && product.images.length > 0
-      ? product.images
-      : ['https://images.unsplash.com/photo-154946?q=80&w=600&auto=format&fit=crop'];
+      ? product.images.map(cleanImageUrl).filter(Boolean)
+      : [fallbackProductImage];
 
     if (product.isHamper && subProductsInCombo.length > 0) {
       // Get the first image of each subproduct, skipping clean duplicates
       const subImages = subProductsInCombo
-        .map(sub => sub.images?.[0])
+        .map(sub => cleanImageUrl(sub.images?.[0]))
         .filter((img): img is string => !!img && !base.includes(img));
       return [...base, ...subImages];
     }
@@ -283,10 +291,13 @@ export default function ProductDetailModal({
               isLight ? 'border-rose-100' : 'border-white/5'
             }`}>
               <img 
-                src={(resolvedImages && resolvedImages[activeImgIdx]) || 'https://images.unsplash.com/photo-154946?q=80&w=600&auto=format&fit=crop'} 
+                src={(resolvedImages && resolvedImages[activeImgIdx]) || fallbackProductImage}
                 alt={product.name} 
                 className="w-full h-full object-cover transition-transform duration-300 hover:scale-105" 
                 referrerPolicy="no-referrer"
+                onError={(e) => {
+                  e.currentTarget.src = fallbackProductImage;
+                }}
               />
 
               {/* Dynamic inclusion of subproduct images inside the main combo image container */}
@@ -299,10 +310,13 @@ export default function ProductDetailModal({
                     {subProductsInCombo.slice(0, 5).map((sub, sIdx) => (
                       <div key={`${sub.id}-${sIdx}`} className="relative group/tooltip col">
                         <img
-                          src={sub.images?.[0] || 'https://images.unsplash.com/photo-154946?q=80&w=150&auto=format&fit=crop'}
+                          src={cleanImageUrl(sub.images?.[0])}
                           alt={sub.name}
                           className="w-10 h-10 sm:w-11 sm:h-11 object-cover rounded-xl border border-rose-100/50 shadow-xs hover:scale-110 transition-transform duration-200"
                           referrerPolicy="no-referrer"
+                          onError={(e) => {
+                            e.currentTarget.src = fallbackProductImage;
+                          }}
                         />
                         <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tooltip:block bg-slate-900/95 text-white text-[9px] font-bold px-2 py-0.5 rounded shadow-lg whitespace-nowrap z-50">
                           {sub.name}
@@ -332,10 +346,13 @@ export default function ProductDetailModal({
                     }`}
                   >
                     <img 
-                      src={img || 'https://images.unsplash.com/photo-154946?q=80&w=600&auto=format&fit=crop'} 
+                      src={img || fallbackProductImage}
                       className="w-full h-full object-cover" 
                       alt="" 
                       referrerPolicy="no-referrer" 
+                      onError={(e) => {
+                        e.currentTarget.src = fallbackProductImage;
+                      }}
                     />
                   </button>
                 ))}
@@ -1107,10 +1124,13 @@ export default function ProductDetailModal({
                         title="Click to view full customizable options"
                       >
                         <img 
-                          src={rec.images?.[0] || 'https://images.unsplash.com/photo-154946?q=80&w=150&auto=format&fit=crop'} 
+                          src={cleanImageUrl(rec.images?.[0])}
                           alt={rec.name}
                           className="w-11 h-11 object-cover rounded-lg border border-slate-200/50 shrink-0"
                           referrerPolicy="no-referrer"
+                          onError={(e) => {
+                            e.currentTarget.src = fallbackProductImage;
+                          }}
                         />
                         <div className="min-w-0 leading-tight">
                           <h4 className="font-bold truncate text-[11.5px] hover:text-[#E91E63] transition">{rec.name}</h4>

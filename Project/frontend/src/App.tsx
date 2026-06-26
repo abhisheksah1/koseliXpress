@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { loadDbState, saveDbState } from './db';
+import React, { useCallback, useState, useEffect } from 'react';
+import { DB_KEY, loadDbState, saveDbState } from './db';
 import { DatabaseState, CurrencySettings, CartItem, Product, ProductStatus } from './types';
 import Header from './components/Customer/Header';
 import Footer from './components/Customer/Footer';
@@ -53,13 +53,59 @@ export default function App() {
   const [catalogSort, setCatalogSort] = useState<string>('recent');
   const [customerProductPage, setCustomerProductPage] = useState<number>(1);
 
+  const applyDatabaseState = useCallback((freshDb: DatabaseState) => {
+    setDbState(freshDb);
+    setSelectedCurrency((current) => {
+      const preferredCode = current?.code || 'NPR';
+      return (
+        freshDb.currencies.find(c => c.code === preferredCode) ||
+        freshDb.currencies.find(c => c.code === 'NPR') ||
+        { code: 'NPR', symbol: 'Rs.', rateToNPR: 1.0, isDefault: true }
+      );
+    });
+  }, []);
+
   useEffect(() => {
     setCustomerProductPage(1);
   }, [selectedCategoryFilter, selectedBrandFilter, catalogSearch, catalogSort]);
 
+  const applyCustomerRouteFromPath = () => {
+    if (isAdminRoute()) return;
+
+    const path = window.location.pathname.replace(/^\/+|\/+$/g, '');
+    if (!path || path === 'home') {
+      setCurrentSlug('home');
+      setSelectedCategoryFilter('');
+      setSelectedBrandFilter('');
+      return;
+    }
+
+    if (path.startsWith('category/')) {
+      const categorySlug = decodeURIComponent(path.replace('category/', ''));
+      setSelectedCategoryFilter(categorySlug);
+      setSelectedBrandFilter('');
+      setCurrentSlug('catalog');
+      return;
+    }
+
+    if (path === 'catalog' || path === 'products') {
+      setCurrentSlug('catalog');
+      return;
+    }
+
+    const pageSlug = path.replace(/^pages?\//, '');
+    setCurrentSlug(decodeURIComponent(pageSlug));
+    setSelectedCategoryFilter('');
+    setSelectedBrandFilter('');
+  };
+
   // Keep admin / storefront in sync with browser URL (back button, direct links)
   useEffect(() => {
-    const onRouteChange = () => setIsAdminApp(isAdminRoute());
+    applyCustomerRouteFromPath();
+    const onRouteChange = () => {
+      setIsAdminApp(isAdminRoute());
+      applyCustomerRouteFromPath();
+    };
     window.addEventListener('popstate', onRouteChange);
     return () => window.removeEventListener('popstate', onRouteChange);
   }, []);
@@ -241,11 +287,7 @@ export default function App() {
   // 1. Initial State Load on mounting (from MongoDB via API)
   useEffect(() => {
     loadDbState().then((freshDb) => {
-    setDbState(freshDb);
-    
-    // Choose base currency initially
-    const base = freshDb.currencies.find(c => c.code === 'NPR') || { code: 'NPR', symbol: 'Rs.', rateToNPR: 1.0, isDefault: true };
-    setSelectedCurrency(base);
+    applyDatabaseState(freshDb);
 
     // Sync payment gateways with backend (pulling first to prevent local storage reset of credentials)
     fetch('/api/payment/get-gateways')
@@ -282,7 +324,7 @@ export default function App() {
             if (!localIds.has(serv.id)) merged.push(serv);
           }
           const updatedDb = { ...freshDb, paymentGateways: merged };
-          setDbState(updatedDb);
+          applyDatabaseState(updatedDb);
           saveDbState(updatedDb);
         } else if (freshDb.paymentGateways) {
           // Sync existing to backend if backend is empty
@@ -305,7 +347,56 @@ export default function App() {
         }
       });
     }).catch(err => console.error('Failed to load store:', err));
-  }, []);
+  }, [applyDatabaseState]);
+
+  // Keep customer storefront tabs aligned with admin edits saved in MongoDB.
+  useEffect(() => {
+    if (isAdminApp) return;
+
+    let cancelled = false;
+    const refreshStorefrontState = async () => {
+      try {
+        const freshDb = await loadDbState();
+        if (!cancelled) applyDatabaseState(freshDb);
+      } catch (err) {
+        console.error('Failed to refresh storefront state:', err);
+      }
+    };
+
+    const handleStorageSync = (event: StorageEvent) => {
+      if (event.key !== DB_KEY || !event.newValue) return;
+      try {
+        applyDatabaseState(JSON.parse(event.newValue) as DatabaseState);
+      } catch (err) {
+        console.error('Failed to sync storefront state from local storage:', err);
+      }
+    };
+
+    const handleFocusSync = () => {
+      void refreshStorefrontState();
+    };
+
+    const handleVisibilitySync = () => {
+      if (document.visibilityState === 'visible') {
+        void refreshStorefrontState();
+      }
+    };
+
+    window.addEventListener('storage', handleStorageSync);
+    window.addEventListener('focus', handleFocusSync);
+    window.addEventListener('pageshow', handleFocusSync);
+    document.addEventListener('visibilitychange', handleVisibilitySync);
+    const intervalId = window.setInterval(refreshStorefrontState, 30000);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener('storage', handleStorageSync);
+      window.removeEventListener('focus', handleFocusSync);
+      window.removeEventListener('pageshow', handleFocusSync);
+      document.removeEventListener('visibilitychange', handleVisibilitySync);
+      window.clearInterval(intervalId);
+    };
+  }, [applyDatabaseState, isAdminApp]);
 
   // Automated special day dispatch reminder checker (4 days prior month/day match)
   useEffect(() => {
@@ -386,7 +477,7 @@ export default function App() {
         const pg = prev.pages?.find(p => p.slug === currentSlug);
         pageTitle = pg ? pg.title : `Page: ${currentSlug}`;
       } else if (selectedCategoryFilter) {
-        const cat = prev.categories?.find(c => c.id === selectedCategoryFilter);
+        const cat = prev.categories?.find(c => c.id === selectedCategoryFilter || c.slug === selectedCategoryFilter);
         pageTitle = cat ? `Category Filter: ${cat.name}` : 'Category Catalog';
         slug = `category/${selectedCategoryFilter}`;
       }
@@ -458,8 +549,13 @@ export default function App() {
         ...prev,
         visitorTracks: updatedTracks
       };
-      
-      saveDbState(nextState);
+
+      fetch('/api/store/visitor-track', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newTrack)
+      }).catch(err => console.error('Failed to save visitor track:', err));
+
       return nextState;
     });
 
@@ -536,7 +632,7 @@ export default function App() {
       const pg = dbState.pages.find(page => page.slug === currentSlug && page.status === 'active');
       if (pg) {
         pageTitle = pg.metaTitle || `${pg.title} | ${dbState.store.storeName}`;
-        pageDesc = pg.metaDescription || `Read about ${pg.title} on ${dbState.store.storeName}. ${pg.description || ''}`;
+        pageDesc = pg.metaDescription || `${pg.title} | ${dbState.store.storeName}`;
         pageKeywords = pg.metaKeywords || `${pg.title}, info portal, local services`;
         
         schemaObj = {
@@ -780,14 +876,84 @@ export default function App() {
     setIsCartOpen(true);
   };
 
+  const navigateToSlug = (slug: string) => {
+    const cleanSlug = (slug || 'home').replace(/^pages?\//, '').replace(/^\/+/, '') || 'home';
+    setCurrentSlug(cleanSlug);
+    setSelectedCategoryFilter('');
+    setSelectedBrandFilter('');
+    const nextPath = cleanSlug === 'home' ? '/' : `/${cleanSlug}`;
+    if (window.location.pathname !== nextPath) {
+      window.history.pushState({}, '', nextPath);
+    }
+  };
+
+  const navigateToCategory = (catIdOrSlug: string) => {
+    const category = dbState.categories.find(cat => cat.id === catIdOrSlug || cat.slug === catIdOrSlug);
+    const categoryKey = category?.slug || category?.id || catIdOrSlug;
+    setSelectedCategoryFilter(category?.id || catIdOrSlug);
+    setSelectedBrandFilter('');
+    setCurrentSlug('catalog');
+    const nextPath = `/category/${categoryKey}`;
+    if (window.location.pathname !== nextPath) {
+      window.history.pushState({}, '', nextPath);
+    }
+  };
+
   // Switch dynamic layouts based on resolving active slug
   const activePageConfig = dbState.pages.find(p => p.slug === currentSlug && p.status === 'active');
+
+  const normalizeCategoryKey = (value?: string) => (value || '').trim().toLowerCase();
+  const getCategoryMatchKeys = (categoryIdOrSlug: string) => {
+    const root = dbState.categories.find((cat) =>
+      cat.id === categoryIdOrSlug ||
+      cat.slug === categoryIdOrSlug ||
+      normalizeCategoryKey(cat.name) === normalizeCategoryKey(categoryIdOrSlug)
+    );
+    if (!root) return new Set([normalizeCategoryKey(categoryIdOrSlug)]);
+
+    const related = [root];
+    const queue = [root.id];
+    while (queue.length > 0) {
+      const parentId = queue.shift();
+      const children = dbState.categories.filter(cat => cat.parentCategoryId === parentId);
+      related.push(...children);
+      queue.push(...children.map(cat => cat.id));
+    }
+
+    return new Set(
+      related.flatMap(cat => [cat.id, cat.slug, cat.name].map(normalizeCategoryKey)).filter(Boolean)
+    );
+  };
+
+  const productMatchesSelectedCategory = (product: Product, categoryIdOrSlug: string) => {
+    const selectedKeys = getCategoryMatchKeys(categoryIdOrSlug);
+    const productCategoryValues = [product.categoryId, ...(product.categoryIds || [])].filter(Boolean);
+    const productKeys = productCategoryValues.flatMap((categoryValue) => {
+      const category = dbState.categories.find(cat =>
+        cat.id === categoryValue ||
+        cat.slug === categoryValue ||
+        normalizeCategoryKey(cat.name) === normalizeCategoryKey(categoryValue)
+      );
+      return category
+        ? [category.id, category.slug, category.name, categoryValue].map(normalizeCategoryKey)
+        : [normalizeCategoryKey(categoryValue)];
+    });
+    return productKeys.some(key => selectedKeys.has(key));
+  };
+
+  const selectedCategory = selectedCategoryFilter
+    ? dbState.categories.find(cat =>
+        cat.id === selectedCategoryFilter ||
+        cat.slug === selectedCategoryFilter ||
+        normalizeCategoryKey(cat.name) === normalizeCategoryKey(selectedCategoryFilter)
+      )
+    : undefined;
 
   // Product listing matching filtration rules
   const catalogProductsBeforeSort = dbState.products.filter(p => {
     if (p.status !== ProductStatus.ACTIVE) return false;
     const matchesCategory = selectedCategoryFilter 
-      ? (p.categoryId === selectedCategoryFilter || (p.categoryIds && p.categoryIds.includes(selectedCategoryFilter)))
+      ? productMatchesSelectedCategory(p, selectedCategoryFilter)
       : true;
     const matchesBrand = selectedBrandFilter ? p.brandId === selectedBrandFilter : true;
     const matchesSearch = p.name.toLowerCase().includes(catalogSearch.toLowerCase()) || p.sku.toLowerCase().includes(catalogSearch.toLowerCase());
@@ -1278,15 +1444,9 @@ export default function App() {
               setIsPortalOpen(true);
             }}
             onSelectCategory={(catId) => {
-              setSelectedCategoryFilter(catId);
-              setCurrentSlug('catalog');
+              navigateToCategory(catId);
             }}
-            onNavigateToSlug={(slug) => {
-              setCurrentSlug(slug);
-              // Clear category and brand filters during top level navigation
-              setSelectedCategoryFilter('');
-              setSelectedBrandFilter('');
-            }}
+            onNavigateToSlug={navigateToSlug}
             currentSlug={currentSlug}
             searchQuery={catalogSearch}
             onSearchChange={setCatalogSearch}
@@ -1303,16 +1463,7 @@ export default function App() {
             /* SCHEDULED MAINTENANCE MODE OVERLAY VIEW */
             <div className="flex-grow flex items-center justify-center p-6 text-center">
               <div className="max-w-lg w-full bg-[#0d0d0d] border border-white/5 rounded-2xl p-8 space-y-6 shadow-2xl">
-                <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mx-auto text-3xl animate-pulse">
-                  🛠️
-                </div>
-                <div className="space-y-2">
-                  <h1 className="text-3xl font-serif italic text-white">Under Scheduled Upgrade</h1>
-                  <p className="text-[10px] text-amber-500 font-mono tracking-widest uppercase font-bold">Store Maintenance Is Active</p>
-                </div>
-                <p className="text-xs text-slate-400 leading-relaxed max-w-md mx-auto">
-                  We are currently optimizing Koseli Xpress visual layouts, adding advanced double-entry bookkeeping, and performing security health checks on Nepal local payment keys. Gifting doorstep deliveries will resume shortly!
-                </p>
+                <h1 className="text-3xl font-serif italic text-white">{dbState.store.storeName || 'Store'} is temporarily unavailable.</h1>
               </div>
             </div>
           ) : (
@@ -1327,7 +1478,7 @@ export default function App() {
                 <BlogViewer 
                   currentSlug={currentSlug}
                   state={dbState}
-                  onNavigateToSlug={setCurrentSlug}
+                  onNavigateToSlug={navigateToSlug}
                   primaryColor={primaryColor}
                 />
               ) : activePageConfig ? (
@@ -1337,7 +1488,6 @@ export default function App() {
                 {currentSlug !== 'home' && (
                   <div className="text-left pb-4 border-b border-white/5">
                     <h1 className="text-3xl font-serif italic text-white tracking-wide">{activePageConfig.title}</h1>
-                    <p className="text-xs text-slate-400 font-mono tracking-widest uppercase mt-1">Discover dynamic collection pages arranged by editors.</p>
                   </div>
                 )}
 
@@ -1348,8 +1498,7 @@ export default function App() {
                   onViewProductDetails={setSelectedProductIdDetails}
                   onAddToCart={(p, e) => handleAddToCart(p, e)}
                   onNavigateToCategory={(catId) => {
-                    setSelectedCategoryFilter(catId);
-                    setCurrentSlug('catalog');
+                    navigateToCategory(catId);
                   }}
                 />
               </div>
@@ -1360,14 +1509,14 @@ export default function App() {
                   <div>
                     <h1 className="text-3xl font-serif italic text-white tracking-wide">
                       {selectedCategoryFilter 
-                        ? dbState.categories.find(c => c.id === selectedCategoryFilter)?.name || 'Handwrapped Gifts'
-                        : 'Handwrapped Gift Catalog'
+                        ? selectedCategory?.name || ''
+                        : ''
                       }
                     </h1>
                     <p className="text-xs text-amber-500/80 font-mono tracking-widest uppercase mt-1">
                       {selectedCategoryFilter 
-                        ? dbState.categories.find(c => c.id === selectedCategoryFilter)?.description || 'Curated catalog selection'
-                        : 'Configure elegant combinations and checkout direct shipping in minutes.'
+                        ? selectedCategory?.description || ''
+                        : ''
                       }
                     </p>
                   </div>
@@ -1431,8 +1580,8 @@ export default function App() {
                         {dbState.categories.map((cat, idx) => (
                           <button
                             key={`cat-filter-btn-${cat.id || idx}`}
-                            onClick={() => setSelectedCategoryFilter(cat.id)}
-                            className={`px-3.5 py-2 text-xs font-semibold rounded-xl text-left transition cursor-pointer ${selectedCategoryFilter === cat.id ? 'bg-amber-500 text-slate-950 font-bold shadow-md shadow-amber-500/10' : 'bg-[#0a0a0a] border border-white/5 hover:border-amber-500/20 text-slate-400 hover:text-white'}`}
+                            onClick={() => navigateToCategory(cat.id)}
+                            className={`px-3.5 py-2 text-xs font-semibold rounded-xl text-left transition cursor-pointer ${selectedCategory?.id === cat.id ? 'bg-amber-500 text-slate-950 font-bold shadow-md shadow-amber-500/10' : 'bg-[#0a0a0a] border border-white/5 hover:border-amber-500/20 text-slate-400 hover:text-white'}`}
                           >
                             {cat.name}
                           </button>
@@ -1573,7 +1722,7 @@ export default function App() {
                     type="button"
                     onClick={() => {
                       setSelectedCategoryFilter('');
-                      setCurrentSlug('catalog');
+                      navigateToSlug('catalog');
                       window.scrollTo({ top: 300, behavior: 'smooth' });
                     }}
                     className={`px-4 py-2 text-xs font-bold rounded-xl transition cursor-pointer ${
@@ -1589,12 +1738,11 @@ export default function App() {
                       key={`footer-top-cat-${cat.id || idx}`}
                       type="button"
                       onClick={() => {
-                        setSelectedCategoryFilter(cat.id);
-                        setCurrentSlug('catalog');
+                        navigateToCategory(cat.id);
                         window.scrollTo({ top: 300, behavior: 'smooth' });
                       }}
                       className={`px-4 py-2 text-xs font-bold rounded-xl transition cursor-pointer ${
-                        selectedCategoryFilter === cat.id 
+                        selectedCategory?.id === cat.id 
                           ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/10' 
                           : 'bg-white border border-rose-105 hover:border-amber-500/25 text-slate-600 hover:text-rose-600 shadow-sm'
                       }`}
@@ -1620,6 +1768,9 @@ export default function App() {
                     onClick={() => {
                       setSelectedBrandFilter('');
                       setCurrentSlug('catalog');
+                      if (window.location.pathname !== '/catalog') {
+                        window.history.pushState({}, '', '/catalog');
+                      }
                       window.scrollTo({ top: 300, behavior: 'smooth' });
                     }}
                     className={`px-4 py-2 text-xs font-bold rounded-xl transition cursor-pointer ${
@@ -1637,6 +1788,9 @@ export default function App() {
                       onClick={() => {
                         setSelectedBrandFilter(brand.id);
                         setCurrentSlug('catalog');
+                        if (window.location.pathname !== '/catalog') {
+                          window.history.pushState({}, '', '/catalog');
+                        }
                         window.scrollTo({ top: 300, behavior: 'smooth' });
                       }}
                       className={`px-4 py-2 text-xs font-bold rounded-xl transition cursor-pointer ${

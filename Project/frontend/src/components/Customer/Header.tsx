@@ -37,7 +37,6 @@ export default function Header({
   const [isSearchBarOpen, setIsSearchBarOpen] = useState(false);
   
   // Dynamic navbar links - managed from Gifting Touch Admin Page Builder
-  // If navLinks is empty, we populate on-the-fly with standard links to categories in state.categories
   const cleanedNavLinks = useMemo(() => {
     const rawLinks = state.appearance.navbarLinks || [];
     if (rawLinks.length > 0) {
@@ -52,73 +51,20 @@ export default function Header({
         enabled: link.enabled !== false,
       }));
     }
-    
-    // Otherwise fallback-generate from physical category nodes and static links for full convenience!
-    const fallbackList: any[] = [];
-    let seq = 1;
-    
-    // 1. Pages/Home links
-    fallbackList.push({
-      id: 'default-home',
-      title: 'Home',
-      url: '/home',
-      type: 'custom',
-      parentMenuId: 'main',
-      sequence: seq++,
-      enabled: true
-    });
-    
-    // 2. Categories — or gift-shop defaults like reference
-    if ((state.categories || []).length > 0) {
-      (state.categories || []).forEach(cat => {
-        fallbackList.push({
-          id: `default-${cat.id}`,
-          title: cat.name,
-          url: `/category/${cat.slug}`,
-          type: 'category',
-          categoryId: cat.id,
-          parentMenuId: 'main',
-          sequence: seq++,
-          enabled: true
-        });
-      });
-    } else {
-      ['Shrawan Gifts', 'Birthday Gifts', 'Anniversary Gifts', 'Cake Delivery', 'Flower Delivery', 'Gift Hampers'].forEach((name, i) => {
-        fallbackList.push({
-          id: `default-gift-${i}`,
-          title: name,
-          url: '/catalog',
-          type: 'custom',
-          parentMenuId: 'main',
-          sequence: seq++,
-          enabled: true
-        });
-      });
-    }
 
-    // 3. Simple About link
-    fallbackList.push({
-      id: 'default-about',
-      title: 'About Us',
-      url: '/page/about',
-      type: 'page',
-      parentMenuId: 'main',
-      sequence: seq++,
-      enabled: true
-    });
-
-    // 4. AI Blog Writer Link
-    fallbackList.push({
-      id: 'default-blog',
-      title: 'Blogs & Guides',
-      url: '/blog',
-      type: 'custom',
-      parentMenuId: 'main',
-      sequence: seq++,
-      enabled: true
-    });
-
-    return fallbackList;
+    return (state.categories || [])
+      .filter(cat => cat.showInNavbar !== false)
+      .sort((a, b) => (a.navbarSeq ?? a.priority ?? 999) - (b.navbarSeq ?? b.priority ?? 999))
+      .map((cat, idx) => ({
+        id: cat.id,
+        title: cat.name,
+        url: `/category/${cat.slug || cat.id}`,
+        type: 'category',
+        categoryId: cat.id,
+        parentMenuId: cat.parentCategoryId || 'main',
+        sequence: cat.navbarSeq ?? cat.priority ?? idx + 1,
+        enabled: cat.showInNavbar !== false,
+      }));
   }, [state.appearance.navbarLinks, state.categories]);
 
   // Top Level main menu items: parentMenuId is 'main' and enabled is true
@@ -180,7 +126,7 @@ export default function Header({
   const secondaryCol = state.appearance?.secondaryColor || '#C2185B';
 
   return (
-    <header className="sticky top-0 z-50 bg-white shadow-sm border-b border-pink-100/60">
+    <header className="sticky top-0 z-50 bg-white shadow-sm border-b border-slate-100">
       {/* Purple announcement bar — like reference top strip */}
       {state.appearance?.stickyNotice && (
         <div
@@ -191,54 +137,79 @@ export default function Header({
         </div>
       )}
 
-      {/* Top row: Search | Logo | Cart */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 sm:py-4">
-        <div className="flex flex-row items-center justify-between gap-3">
-          
-          {/* Left: Search */}
-          <div className="flex items-center shrink-0 w-20 sm:w-24">
-            <button
-              onClick={() => setIsSearchBarOpen(!isSearchBarOpen)}
-              className="p-2 rounded-full text-slate-700 hover:bg-pink-50 transition cursor-pointer"
-              style={{ color: isSearchBarOpen ? primaryCol : undefined }}
-              aria-label="Search"
-            >
-              <Search className="w-5 h-5" />
-            </button>
-          </div>
-
-          {/* Center: Logo */}
-          <div className="flex items-center justify-center flex-1 min-w-0">
+      {/* Main commerce header: logo | search | actions */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
+        <div className="flex items-center gap-3 sm:gap-5">
+          {/* Left: Logo */}
+          <div className="flex items-center shrink-0 min-w-0">
             <button
               onClick={() => onNavigateToSlug('home')}
-              className="flex flex-col items-center cursor-pointer group hover:opacity-90 transition focus:outline-none"
+              className="flex items-center cursor-pointer group hover:opacity-90 transition focus:outline-none"
               aria-label="Home"
             >
               {state.appearance?.siteLogo ? (
                 <img
                   src={state.appearance.siteLogo}
                   alt={state.store?.storeName || 'Koseli Xpress'}
-                  className="h-10 sm:h-14 w-auto object-contain max-w-[200px]"
+                  className="h-11 sm:h-14 w-auto object-contain max-w-[180px] sm:max-w-[220px]"
                   referrerPolicy="no-referrer"
                 />
               ) : (
-                <>
-                  <span className="font-script text-3xl sm:text-4xl font-bold leading-none" style={{ color: secondaryCol }}>
-                    Koseli
-                  </span>
-                  <span className="text-[10px] sm:text-xs font-bold tracking-[0.35em] uppercase mt-0.5" style={{ color: primaryCol }}>
-                    Xpress
-                  </span>
-                </>
+                <span className="text-xl sm:text-2xl font-black tracking-tight whitespace-nowrap" style={{ color: primaryCol }}>
+                  {state.store?.storeName || 'Koseli Xpress'}
+                </span>
               )}
             </button>
           </div>
 
-          {/* Right: Cart + account */}
-          <div className="flex items-center justify-end gap-1 sm:gap-2 shrink-0 w-20 sm:w-auto">
+          {/* Center: desktop search */}
+          <div className="hidden md:block flex-1 max-w-2xl mx-auto">
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search for gifts, cakes, flowers..."
+                className="w-full h-11 pl-11 pr-4 rounded-full border border-slate-200 bg-slate-50 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-pink-200 focus:border-pink-300 transition"
+                value={searchQuery || ''}
+                onChange={(e) => onSearchChange?.(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* Right: search + currency + account + cart */}
+          <div className="flex items-center justify-end gap-1 sm:gap-2 shrink-0 ml-auto">
+            <button
+              onClick={() => setIsSearchBarOpen(!isSearchBarOpen)}
+              className="md:hidden p-2 rounded-full text-slate-700 hover:bg-pink-50 transition cursor-pointer"
+              style={{ color: isSearchBarOpen ? primaryCol : undefined }}
+              aria-label="Search"
+            >
+              <Search className="w-5 h-5" />
+            </button>
+
+            <div className="hidden lg:block relative group">
+              <button type="button" className="h-10 px-3 rounded-full border border-slate-200 bg-white flex items-center gap-1.5 text-[12px] font-bold text-slate-700 hover:border-pink-200 hover:text-[#E91E63] cursor-pointer">
+                <Coins className="w-3.5 h-3.5" />
+                {selectedCurrency.code}
+                <ChevronDown className="w-3 h-3" />
+              </button>
+              <div className="absolute right-0 top-full mt-2 bg-white border border-pink-100 rounded-xl shadow-xl hidden group-hover:block w-36 overflow-hidden z-50">
+                {state.currencies.map(curr => (
+                  <button
+                    key={curr.code}
+                    type="button"
+                    onClick={() => onSelectCurrency(curr)}
+                    className="w-full text-left px-3 py-2 text-slate-700 hover:bg-pink-50 text-[11px] font-semibold transition block cursor-pointer border-0 bg-transparent"
+                  >
+                    {curr.code} ({curr.symbol})
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <button
               onClick={onOpenCart}
-              className="relative p-2 text-slate-700 hover:bg-pink-50 rounded-full transition cursor-pointer"
+              className="relative h-10 w-10 flex items-center justify-center text-slate-700 hover:bg-pink-50 rounded-full transition cursor-pointer"
               aria-label="Cart"
             >
               <ShoppingCart className="w-5 h-5" />
@@ -255,7 +226,7 @@ export default function Header({
             {!customerUser ? (
               <button
                 onClick={() => onOpenPortal('signin')}
-                className="hidden sm:flex p-2 text-slate-600 hover:text-[#E91E63] transition cursor-pointer"
+                className="hidden sm:flex h-10 w-10 items-center justify-center rounded-full text-slate-600 hover:bg-pink-50 hover:text-[#E91E63] transition cursor-pointer"
                 title="Sign in"
               >
                 <User className="w-5 h-5" />
@@ -272,7 +243,7 @@ export default function Header({
 
             <button
               onClick={() => setIsMobileOpen(!isMobileOpen)}
-              className="p-2 text-slate-700 md:hidden cursor-pointer"
+              className="h-10 w-10 flex items-center justify-center rounded-full text-slate-700 hover:bg-pink-50 md:hidden cursor-pointer"
               aria-label="Menu"
             >
               {isMobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -317,11 +288,14 @@ export default function Header({
             Cancel
           </button>
         </div>
-      )}      {/* Category navigation — reference style */}
-      <div className="hidden md:block border-t border-pink-100/80 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
-          <nav className="flex items-center justify-center flex-wrap gap-x-6 lg:gap-x-10 gap-y-2 text-[13px] font-semibold text-slate-700">
-            {topLevelMenus.filter(l => l.id !== 'default-home').map((link) => {
+      )}
+
+      {/* Category navigation — compact live-site style */}
+      {topLevelMenus.length > 0 && (
+      <div className="hidden md:block border-t border-slate-100 bg-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <nav className="flex items-center justify-center gap-x-7 lg:gap-x-9 overflow-x-auto whitespace-nowrap py-3 text-[13px] font-semibold text-slate-700 scrollbar-hide">
+            {topLevelMenus.map((link) => {
               const children = getChildrenForMenu(link.id);
               const hasSubs = children.length > 0;
 
@@ -335,7 +309,7 @@ export default function Header({
                       <span>{link.title}</span>
                       <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#E91E63] transition" />
                     </button>
-                    <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-white border border-pink-100 shadow-xl hidden group-hover:block w-52 overflow-hidden z-50 p-2 rounded-xl">
+                    <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-white border border-pink-100 shadow-xl hidden group-hover:block w-56 overflow-hidden z-50 p-2 rounded-xl">
                       <div className="px-2.5 py-1.5 text-[9px] uppercase font-bold tracking-widest border-b border-pink-50 mb-1.5" style={{ color: primaryCol }}>
                         {link.title}
                       </div>
@@ -363,37 +337,16 @@ export default function Header({
                 <button
                   key={`hier-btn-${link.id}`}
                   onClick={() => handleLinkClick(link.title, link.url, link.categoryId)}
-                  className="flex items-center gap-1 hover:text-[#E91E63] transition cursor-pointer font-semibold text-[13px] border-0 bg-transparent py-1 focus:outline-none"
+                  className="hover:text-[#E91E63] transition cursor-pointer font-semibold text-[13px] border-0 bg-transparent py-1 focus:outline-none"
                 >
                   {link.title}
-                  <ChevronDown className="w-3 h-3 text-slate-400 opacity-60" />
                 </button>
               );
             })}
-
-            {/* Currency — end of nav */}
-            <div className="relative group ml-2 pl-4 border-l border-pink-100">
-              <button type="button" className="flex items-center gap-1 text-[12px] font-semibold text-slate-600 hover:text-[#E91E63] cursor-pointer border-0 bg-transparent">
-                <Coins className="w-3.5 h-3.5" />
-                {selectedCurrency.code}
-                <ChevronDown className="w-3 h-3" />
-              </button>
-              <div className="absolute right-0 top-full mt-1 bg-white border border-pink-100 rounded-lg shadow-xl hidden group-hover:block w-32 overflow-hidden z-40">
-                {state.currencies.map(curr => (
-                  <button
-                    key={curr.code}
-                    type="button"
-                    onClick={() => onSelectCurrency(curr)}
-                    className="w-full text-left px-3 py-2 text-slate-700 hover:bg-pink-50 text-[11px] font-semibold transition block cursor-pointer border-0 bg-transparent"
-                  >
-                    {curr.code} ({curr.symbol})
-                  </button>
-                ))}
-              </div>
-            </div>
           </nav>
         </div>
       </div>
+      )}
 
       {/* Mobile Menu Tray in Light styling */}
       {isMobileOpen && (
@@ -401,9 +354,8 @@ export default function Header({
           
           {/* Quick links */}
           <div className="p-4 space-y-2">
-            <span className="text-[9px] font-mono tracking-widest font-extrabold uppercase block mb-1" style={{ color: primaryCol }}>Quick Links</span>
+            <span className="text-[9px] font-mono tracking-widest font-extrabold uppercase block mb-1" style={{ color: primaryCol }}>Menu</span>
             
-            {/* Track Order Button on Mobile (visible) */}
             <button
               onClick={() => {
                 onOpenPortal();
@@ -413,20 +365,19 @@ export default function Header({
             >
               <span className="flex items-center gap-1.5">
                 <User className="w-3.5 h-3.5 text-rose-500" />
-                Track Order
+                Account / Track Order
               </span>
               <ChevronRight className="w-4 h-4 text-slate-400" />
             </button>
 
-            {/* Dynamic unified customized navigation links */}
             <button
               onClick={() => {
-                onSelectCategory?.('');
+                onNavigateToSlug('catalog');
                 setIsMobileOpen(false);
               }}
               className="w-full flex items-center justify-between text-left py-2 px-3 rounded-lg text-xs font-semibold border bg-transparent text-slate-705 hover:bg-slate-50 border-transparent"
             >
-              <span>All Catalog List</span>
+              <span>All Products</span>
               <ChevronRight className="w-4 h-4 text-slate-400" />
             </button>
 

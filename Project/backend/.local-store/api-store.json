@@ -1,0 +1,130 @@
+{
+  "users": [],
+  "logs": [],
+  "apiOrders": [],
+  "manualPaymentSetup": {
+    "bankName": "",
+    "accountName": "",
+    "accountNumber": "",
+    "qrCode": "",
+    "instructions": "",
+    "whatsAppNumber": ""
+  },
+  "paymentGateways": [
+    {
+      "id": "esewa",
+      "merchantId": "EPAYTEST",
+      "secretKey": "8g786g78h76h876h",
+      "publicKey": "",
+      "apiEnvironment": "live",
+      "isEnabled": true,
+      "extraSettings": {},
+      "name": "eSewa Wallet Payment",
+      "logoUrl": "https://esewa.com.np/common/images/esewa_logo.png",
+      "priority": 2,
+      "mappedAccountId": "acc-1782455997152",
+      "acceptableCurrencies": [
+        "NPR"
+      ]
+    },
+    {
+      "id": "khalti",
+      "merchantId": "https://dev.khalti.com/api/v2/",
+      "secretKey": "",
+      "publicKey": "https://dev.khalti.com/api/v2/",
+      "apiEnvironment": "test",
+      "isEnabled": false,
+      "extraSettings": {},
+      "name": "Khalti Mobile Wallet",
+      "logoUrl": "https://blog.khalti.com/wp-content/uploads/2021/01/khalti-logo.png",
+      "priority": 3,
+      "mappedAccountId": "acc-1782455997152"
+    },
+    {
+      "id": "fonepay_static",
+      "name": "Fonepay Static QR",
+      "logoUrl": "https://brandessentials.org/wp-content/uploads/2023/12/fonepay-logo.png",
+      "merchantId": "",
+      "secretKey": "",
+      "apiEnvironment": "test",
+      "isEnabled": true,
+      "priority": 4,
+      "mappedAccountId": "acc-1782455997152",
+      "extraSettings": {
+        "fonepayUsername": "",
+        "fonepayPassword": "",
+        "qrImageUrl": ""
+      },
+      "publicKey": "",
+      "acceptableCurrencies": [
+        "AUD",
+        "NPR"
+      ]
+    },
+    {
+      "id": "fonepay_dynamic",
+      "name": "Fonepay Dynamic QR",
+      "logoUrl": "https://brandessentials.org/wp-content/uploads/2023/12/fonepay-logo.png",
+      "merchantId": "",
+      "secretKey": "",
+      "apiEnvironment": "test",
+      "isEnabled": true,
+      "priority": 5,
+      "mappedAccountId": "acc-1782455997152",
+      "extraSettings": {
+        "fonepayUsername": "",
+        "fonepayPassword": ""
+      },
+      "publicKey": ""
+    },
+    {
+      "id": "nps",
+      "name": "Visa Card & Master Card",
+      "merchantId": "",
+      "secretKey": "",
+      "apiEnvironment": "test",
+      "isEnabled": false,
+      "mappedAccountId": "acc-1782456065873",
+      "extraSettings": {
+        "merchantName": "",
+        "apiUsername": "",
+        "apiPassword": ""
+      },
+      "publicKey": ""
+    },
+    {
+      "id": "manual",
+      "name": "Manual Bank Transfer / QR Pay",
+      "merchantId": "MANUAL",
+      "secretKey": "",
+      "apiEnvironment": "test",
+      "isEnabled": false,
+      "priority": 6,
+      "mappedAccountId": "acc-1782455997152",
+      "extraSettings": {
+        "bankName": "",
+        "accountName": "",
+        "accountNumber": "",
+        "branchName": "",
+        "instructions": "",
+        "qrImageUrl": ""
+      },
+      "publicKey": ""
+    },
+    {
+      "id": "cod",
+      "name": "Cash on Delivery (COD)",
+      "logoUrl": "",
+      "merchantId": "COD",
+      "secretKey": "",
+      "apiEnvironment": "live",
+      "isEnabled": false,
+      "priority": 1,
+      "mappedAccountId": "acc-1782455997152",
+      "extraSettings": {
+        "instructions": "Pay the delivery rider in cash when your gift arrives."
+      },
+      "publicKey": ""
+    }
+  ]
+}

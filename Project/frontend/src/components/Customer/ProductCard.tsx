@@ -3,6 +3,14 @@ import { Product, CurrencySettings, DeliveryGroup } from '../../types';
 import { ShoppingBasket, Sparkles } from 'lucide-react';
 import { getProductStock, isProductOutOfStockForCustomer, isProductLowStockForCustomer } from '../../utils/stockUtils';
 
+const fallbackProductImage = 'https://images.unsplash.com/photo-154946?q=80&w=600&auto=format&fit=crop';
+
+function cleanImageUrl(url?: string): string {
+  const cleaned = (url || '').replace(/&amp;/g, '&').trim();
+  if (!cleaned) return fallbackProductImage;
+  return cleaned.startsWith('//') ? `https:${cleaned}` : cleaned;
+}
+
 interface ProductCardProps {
   key?: any;
   product: Product;
@@ -31,6 +39,7 @@ export default function ProductCard({
   const isOutOfStock = isProductOutOfStockForCustomer(product, allProducts);
   const actualStock = getProductStock(product, allProducts);
   const isLowStock = isProductLowStockForCustomer(product, allProducts);
+  const primaryImage = cleanImageUrl(product.images?.[0]);
 
   const subProducts = product.isHamper && product.hamperItems && allProducts
     ? product.hamperItems
@@ -47,10 +56,13 @@ export default function ProductCard({
         {/* Aspect Photo */}
         <div className="relative aspect-square overflow-hidden bg-[rgba(var(--primary-rgb),0.02)]">
           <img 
-            src={(product.images && product.images[0]) || 'https://images.unsplash.com/photo-154946?q=80&w=600&auto=format&fit=crop'} 
+            src={primaryImage}
             alt={`${product.name} - Handwrapped Premium Gift delivered in Kathmandu, Nepal`} 
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 opacity-100"
             referrerPolicy="no-referrer"
+            onError={(e) => {
+              e.currentTarget.src = fallbackProductImage;
+            }}
           />
 
           {/* Combo Subproducts visual compilation inside images */}
@@ -59,10 +71,13 @@ export default function ProductCard({
               {subProducts.slice(0, 3).map((sub, sIdx) => (
                 <div key={`${sub.id}-${sIdx}`} className="relative group/tooltip">
                   <img
-                    src={sub.images?.[0] || 'https://images.unsplash.com/photo-154946?q=80&w=150&auto=format&fit=crop'}
+                    src={cleanImageUrl(sub.images?.[0])}
                     alt={sub.name}
                     className="w-6.5 h-6.5 object-cover rounded-lg border border-white shadow-xs block shrink-0"
                     referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      e.currentTarget.src = fallbackProductImage;
+                    }}
                   />
                   <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover/tooltip:block bg-slate-900/95 text-white text-[8px] font-bold px-1.5 py-0.5 rounded shadow-lg whitespace-nowrap z-50">
                     {sub.name}

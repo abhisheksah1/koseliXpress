@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getAppState, saveAppState } from '../services/appStateService.js';
+import { appendVisitorTrack, getAppState, saveAppState } from '../services/appStateService.js';
 
 const router = Router();
 
@@ -27,6 +27,20 @@ router.put('/', async (req, res) => {
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Failed to save store';
     console.error('PUT /api/store error:', err);
+    res.status(500).json({ error: message });
+  }
+});
+
+router.post('/visitor-track', async (req, res) => {
+  try {
+    if (!req.body || typeof req.body !== 'object') {
+      return res.status(400).json({ error: 'Invalid visitor track payload' });
+    }
+    await appendVisitorTrack(req.body);
+    res.json({ success: true });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Failed to save visitor track';
+    console.error('POST /api/store/visitor-track error:', err);
     res.status(500).json({ error: message });
   }
 });

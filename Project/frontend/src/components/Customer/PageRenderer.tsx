@@ -29,8 +29,44 @@ export default function PageRenderer({
   const isLight = state.appearance?.themeMode !== 'dark';
   const primary = state.appearance?.primaryColor || '#E91E63';
   const secondary = state.appearance?.secondaryColor || '#C2185B';
-  const defaultHeroImage = 'https://images.unsplash.com/photo-1513885539091-8f945a81cd37?q=80&w=2000&auto=format&fit=crop';
+  const normalizeCategoryKey = (value?: string) => (value || '').trim().toLowerCase();
+  const getCategoryMatchKeys = (categoryIdOrSlug: string) => {
+    const root = state.categories.find((cat) =>
+      cat.id === categoryIdOrSlug ||
+      cat.slug === categoryIdOrSlug ||
+      normalizeCategoryKey(cat.name) === normalizeCategoryKey(categoryIdOrSlug)
+    );
+    if (!root) return new Set([normalizeCategoryKey(categoryIdOrSlug)]);
 
+    const related = [root];
+    const queue = [root.id];
+    while (queue.length > 0) {
+      const parentId = queue.shift();
+      const children = state.categories.filter(cat => cat.parentCategoryId === parentId);
+      related.push(...children);
+      queue.push(...children.map(cat => cat.id));
+    }
+
+    return new Set(
+      related.flatMap(cat => [cat.id, cat.slug, cat.name].map(normalizeCategoryKey)).filter(Boolean)
+    );
+  };
+
+  const productMatchesCategory = (product: Product, categoryIdOrSlug: string) => {
+    const selectedKeys = getCategoryMatchKeys(categoryIdOrSlug);
+    const productCategoryValues = [product.categoryId, ...(product.categoryIds || [])].filter(Boolean);
+    const productKeys = productCategoryValues.flatMap((categoryValue) => {
+      const category = state.categories.find(cat =>
+        cat.id === categoryValue ||
+        cat.slug === categoryValue ||
+        normalizeCategoryKey(cat.name) === normalizeCategoryKey(categoryValue)
+      );
+      return category
+        ? [category.id, category.slug, category.name, categoryValue].map(normalizeCategoryKey)
+        : [normalizeCategoryKey(categoryValue)];
+    });
+    return productKeys.some(key => selectedKeys.has(key));
+  };
   return (
     <div className={`font-sans pb-16 ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>
       {sections.map((section, sectionIdx) => {
@@ -48,16 +84,20 @@ export default function PageRenderer({
           
           /* SECTION: PURPLE GIFT-SHOP HERO (reference layout) */
           case 'banner': {
-            const scriptTitle = (data as any).scriptTitle || 'Celebrate';
-            const boldSubtitle = (data as any).boldSubtitle || 'SAME DAY DELIVERY';
-            const heroNavLinks: string[] = (data as any).heroNavLinks || ['FLOWER DELIVERY', 'ALL GIFT ITEMS', 'FRESH FLOWER', 'CAKES'];
-            const pillTags: string[] = (data as any).pillTags || ['All Over Nepal', 'Fresh Flowers | Long Life Flowers'];
-            const heroImage = data.imageUrl || 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=800&auto=format&fit=crop';
+            const scriptTitle = (data as any).scriptTitle || '';
+            const boldSubtitle = (data as any).boldSubtitle || '';
+            const heroNavLinks: string[] = (data as any).heroNavLinks || [];
+            const pillTags: string[] = (data as any).pillTags || [];
+            const heroImage = data.imageUrl || '';
+
+            if (!scriptTitle && !boldSubtitle && !data.subtitle && !data.buttonText && !heroImage && heroNavLinks.length === 0 && pillTags.length === 0) {
+              return null;
+            }
 
             return wrap(
               <section className="relative overflow-hidden hero-purple-gradient hero-floral-pattern">
                 {/* Hero sub-navigation */}
-                <div className="border-b border-pink-200/40 bg-white/30 backdrop-blur-sm">
+                {heroNavLinks.length > 0 && <div className="border-b border-pink-200/40 bg-white/30 backdrop-blur-sm">
                   <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <nav className="flex items-center justify-center gap-4 sm:gap-8 py-3 overflow-x-auto scrollbar-hide">
                       {heroNavLinks.map((label, i) => (
@@ -72,7 +112,7 @@ export default function PageRenderer({
                       ))}
                     </nav>
                   </div>
-                </div>
+                </div>}
 
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16 lg:py-20">
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-center">
@@ -82,16 +122,20 @@ export default function PageRenderer({
                       <span className="absolute -top-4 left-[45%] text-pink-400 text-lg hidden sm:block">✦</span>
                       <span className="absolute top-24 -left-2 text-pink-300 text-sm hidden sm:block">✦</span>
 
-                      <h1
-                        className="font-script text-[5rem] sm:text-[6.5rem] lg:text-[7.5rem] leading-[0.85] font-bold tracking-tight"
-                        style={{ color: secondary }}
-                      >
-                        {scriptTitle}
-                      </h1>
+                      {scriptTitle && (
+                        <h1
+                          className="font-script text-[5rem] sm:text-[6.5rem] lg:text-[7.5rem] leading-[0.85] font-bold tracking-tight"
+                          style={{ color: secondary }}
+                        >
+                          {scriptTitle}
+                        </h1>
+                      )}
 
-                      <p className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 tracking-tight uppercase leading-tight">
-                        {boldSubtitle}
-                      </p>
+                      {boldSubtitle && (
+                        <p className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 tracking-tight uppercase leading-tight">
+                          {boldSubtitle}
+                        </p>
+                      )}
 
                       {data.subtitle && (
                         <p className="text-sm sm:text-base text-slate-600 max-w-md leading-relaxed hidden sm:block">
@@ -118,7 +162,7 @@ export default function PageRenderer({
                       )}
 
                       {/* Pill tags */}
-                      <div className="flex flex-wrap gap-2 pt-4">
+                      {pillTags.length > 0 && <div className="flex flex-wrap gap-2 pt-4">
                         {pillTags.map((tag, i) => (
                           <span
                             key={i}
@@ -127,11 +171,11 @@ export default function PageRenderer({
                             {tag}
                           </span>
                         ))}
-                      </div>
+                      </div>}
                     </div>
 
                     {/* Right: arch portrait */}
-                    <div className="relative flex justify-center order-1 lg:order-2">
+                    {heroImage && <div className="relative flex justify-center order-1 lg:order-2">
                       <div
                         className="relative w-[280px] h-[380px] sm:w-[320px] sm:h-[440px] lg:w-[360px] lg:h-[480px] rounded-t-[999px] rounded-b-[999px] overflow-hidden border-[6px] border-white shadow-2xl"
                         style={{ boxShadow: `0 24px 60px ${primary}33` }}
@@ -145,7 +189,7 @@ export default function PageRenderer({
                       </div>
                       <span className="absolute top-8 right-8 sm:right-16 text-pink-400 text-xl">✦</span>
                       <span className="absolute bottom-16 left-4 text-pink-400 text-sm">✦</span>
-                    </div>
+                    </div>}
                   </div>
                 </div>
               </section>
@@ -153,12 +197,8 @@ export default function PageRenderer({
           }
 
           case 'trust_strip': {
-            const items = data.items || [
-              { icon: 'truck', title: 'Express Delivery', desc: 'Same-day in Kathmandu Valley' },
-              { icon: 'gift', title: 'Artisan Wrapped', desc: 'Every gift hand-prepared' },
-              { icon: 'shield', title: 'Secure Payments', desc: 'eSewa, Khalti & cards' },
-              { icon: 'heart', title: 'Made with Love', desc: 'Premium quality guaranteed' },
-            ];
+            const items = data.items || [];
+            if (items.length === 0) return null;
             const iconMap: Record<string, React.ReactNode> = {
               truck: <Truck className="w-5 h-5" />,
               gift: <Gift className="w-5 h-5" />,
@@ -186,11 +226,12 @@ export default function PageRenderer({
 
           case 'features': {
             const feats = data.items || [];
+            if (feats.length === 0 && !data.title && !data.subtitle) return null;
             return wrap(
               <section className="py-16 sm:py-20">
                 <div className="text-center max-w-2xl mx-auto mb-12 space-y-3">
-                  <p className="text-[11px] font-bold tracking-[0.25em] uppercase" style={{ color: secondary }}>{data.subtitle || 'Why Koseli Xpress'}</p>
-                  <h2 className="font-display text-3xl sm:text-4xl font-semibold italic text-slate-900">{data.title || 'The Premium Gifting Experience'}</h2>
+                  {data.subtitle && <p className="text-[11px] font-bold tracking-[0.25em] uppercase" style={{ color: secondary }}>{data.subtitle}</p>}
+                  {data.title && <h2 className="font-display text-3xl sm:text-4xl font-semibold italic text-slate-900">{data.title}</h2>}
                 </div>
                 <div className="grid md:grid-cols-3 gap-6 sm:gap-8">
                   {feats.map((f: any, i: number) => (
@@ -208,6 +249,7 @@ export default function PageRenderer({
           }
 
           case 'cta_band':
+            if (!data.title && !data.subtitle && !data.buttonText) return null;
             return wrap(
               <section className="py-16 sm:py-20">
                 <div
@@ -215,8 +257,8 @@ export default function PageRenderer({
                   style={{ background: `linear-gradient(135deg, ${primary} 0%, ${secondary} 100%)` }}
                 >
                   <div className="absolute inset-0 opacity-10 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4xIj48cGF0aCBkPSJNMzYgMzRoLTJ2LTRoMnY0em0wLTZoLTJWMjRoMnY0em0wLTZoLTJWMmg0djR6Ii8+PC9nPjwvZz48L3N2Zz4=')]" />
-                  <h2 className="relative font-display text-3xl sm:text-4xl font-semibold italic text-white">{data.title || 'Ready to Send Something Special?'}</h2>
-                  <p className="relative text-white/85 max-w-lg mx-auto text-sm sm:text-base">{data.subtitle || 'Browse our curated collection or build a custom hamper for your loved ones.'}</p>
+                  {data.title && <h2 className="relative font-display text-3xl sm:text-4xl font-semibold italic text-white">{data.title}</h2>}
+                  {data.subtitle && <p className="relative text-white/85 max-w-lg mx-auto text-sm sm:text-base">{data.subtitle}</p>}
                   {data.buttonText && (
                     <a
                       href={data.buttonUrl || '#shop-collection'}
@@ -239,9 +281,9 @@ export default function PageRenderer({
                 isLight ? 'bg-white border-rose-100/60' : 'bg-[#0d0d0d] border-white/5'
               }`}>
                 <img 
-                  src={slides[activeSlideIndex] || 'https://images.unsplash.com/photo-154946?q=80&w=1200&auto=format&fit=crop'} 
+                  src={slides[activeSlideIndex]} 
                   className="w-full h-full object-cover transition-all duration-700 opacity-100" 
-                  alt={`Curated Gift Collection Slideshow frame ${activeSlideIndex + 1} - Koseli Express Nepal`} 
+                  alt={data.title || `Slideshow frame ${activeSlideIndex + 1}`} 
                   referrerPolicy="no-referrer"
                 />
                 
@@ -289,7 +331,7 @@ export default function PageRenderer({
             // 3. Optional Filter: Hide Empty Categories
             if (data.hideEmpty) {
               targetCategories = targetCategories.filter(c => {
-                const count = state.products.filter(p => p.categoryId === c.id && p.status !== 'deleted').length;
+                const count = state.products.filter(p => productMatchesCategory(p, c.id) && p.status !== 'deleted').length;
                 return count > 0;
               });
             }
@@ -299,7 +341,7 @@ export default function PageRenderer({
             if (activeSort === 'name') {
               targetCategories.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
             } else if (activeSort === 'product_count') {
-              const getCount = (cId: string) => state.products.filter(p => p.categoryId === cId && p.status !== 'deleted').length;
+              const getCount = (cId: string) => state.products.filter(p => productMatchesCategory(p, cId) && p.status !== 'deleted').length;
               targetCategories.sort((a, b) => getCount(b.id) - getCount(a.id));
             } else if (activeSort === 'latest') {
               targetCategories.sort((a, b) => {
@@ -319,20 +361,20 @@ export default function PageRenderer({
             return wrap(
               <section id="shop-collection" className="py-16 sm:py-20 space-y-10">
                 <div className="text-center max-w-2xl mx-auto space-y-3">
-                  <p className="text-[11px] font-bold tracking-[0.25em] uppercase" style={{ color: secondary }}>{data.subtitle || 'Our Collections'}</p>
-                  <h2 className="font-display text-3xl sm:text-4xl font-semibold italic text-slate-900">{data.title || 'Shop by Category'}</h2>
+                  {data.subtitle && <p className="text-[11px] font-bold tracking-[0.25em] uppercase" style={{ color: secondary }}>{data.subtitle}</p>}
+                  {data.title && <h2 className="font-display text-3xl sm:text-4xl font-semibold italic text-slate-900">{data.title}</h2>}
                 </div>
 
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
                   {targetCategories.map((cat, catIdx) => {
-                    const prodCount = state.products.filter(p => p.categoryId === cat.id && p.status !== 'deleted').length;
+                    const prodCount = state.products.filter(p => productMatchesCategory(p, cat.id) && p.status !== 'deleted').length;
                     return (
                       <div
                         key={`cat-grid-item-${cat.id || catIdx}`}
                         onClick={() => onNavigateToCategory(cat.id)}
                         className="group relative h-52 sm:h-60 rounded-2xl overflow-hidden cursor-pointer premium-card transition duration-500"
                       >
-                        <img src={cat.image || defaultHeroImage} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" alt={cat.name} referrerPolicy="no-referrer" />
+                        {cat.image && <img src={cat.image} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" alt={cat.name} referrerPolicy="no-referrer" />}
                         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
                         <div className="absolute inset-x-5 bottom-5 text-left">
                           <h4 className="font-display text-lg sm:text-xl italic text-white font-medium">{cat.name}</h4>
@@ -341,19 +383,6 @@ export default function PageRenderer({
                       </div>
                     );
                   })}
-                  {targetCategories.length === 0 && (
-                    <div className="col-span-full grid sm:grid-cols-3 gap-4">
-                      {['Flowers & Bouquets', 'Gourmet Cakes', 'Gift Hampers'].map((label, i) => (
-                        <div key={i} className="premium-card rounded-2xl p-8 text-center space-y-3 border-dashed">
-                          <div className="w-12 h-12 mx-auto rounded-full flex items-center justify-center text-white text-lg" style={{ background: `linear-gradient(135deg, ${primary}, ${secondary})` }}>
-                            <Gift className="w-5 h-5" />
-                          </div>
-                          <h4 className="font-display text-lg italic text-slate-700">{label}</h4>
-                          <p className="text-xs text-slate-400">Add categories from Admin → Products</p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
               </section>
             );
@@ -369,8 +398,8 @@ export default function PageRenderer({
             return wrap(
               <section className="py-16 sm:py-20 space-y-10">
                 <div className="text-center max-w-2xl mx-auto space-y-3">
-                  <p className="text-[11px] font-bold tracking-[0.25em] uppercase" style={{ color: secondary }}>{data.subtitle || 'Curated Selection'}</p>
-                  <h2 className="font-display text-3xl sm:text-4xl font-semibold italic text-slate-900">{data.title || 'Featured Gifts'}</h2>
+                  {data.subtitle && <p className="text-[11px] font-bold tracking-[0.25em] uppercase" style={{ color: secondary }}>{data.subtitle}</p>}
+                  {data.title && <h2 className="font-display text-3xl sm:text-4xl font-semibold italic text-slate-900">{data.title}</h2>}
                 </div>
 
                 {targetedProducts.length > 0 ? (
@@ -386,21 +415,14 @@ export default function PageRenderer({
                       />
                     ))}
                   </div>
-                ) : (
-                  <div className="premium-card rounded-3xl p-12 sm:p-16 text-center max-w-2xl mx-auto space-y-4">
-                    <div className="w-16 h-16 mx-auto rounded-2xl flex items-center justify-center text-white" style={{ background: `linear-gradient(135deg, ${primary}, ${secondary})` }}>
-                      <Gift className="w-8 h-8" />
-                    </div>
-                    <h3 className="font-display text-2xl italic text-slate-800">Your Collection Awaits</h3>
-                    <p className="text-sm text-slate-500 leading-relaxed">Products you add in the admin panel will appear here automatically — beautifully presented for your customers.</p>
-                  </div>
-                )}
+                ) : null}
               </section>
             );
           }
 
           /* SECTION: IMAGE WITH SIDE CONTENT */
           case 'image_content': {
+            if (!data.title && !data.subtitle && !data.content && !data.imageUrl && !data.buttonLabel) return null;
             const layout = data.layoutPreset || 'left';
             const btnLabel = data.buttonLabel;
             const btnUrl = data.buttonPath || '#';
@@ -431,19 +453,21 @@ export default function PageRenderer({
               <div className={`relative w-full aspect-video sm:aspect-square rounded-2xl overflow-hidden border max-h-[350px] shadow-lg ${
                 isLight ? 'bg-white border-rose-100' : 'bg-slate-950 border-white/5'
               }`}>
-                <img src={data.imageUrl || 'https://images.unsplash.com/photo-1513151233558-d860c5398176?q=80&w=600&auto=format&fit=crop'} className="w-full h-full object-cover opacity-100 hover:scale-[1.02] transition duration-500" alt={data.title ? `${data.title} - Curated Gift Hamper` : "Koseli Curated Hamper Spotlight Image"} referrerPolicy="no-referrer" />
+                {data.imageUrl && <img src={data.imageUrl} className="w-full h-full object-cover opacity-100 hover:scale-[1.02] transition duration-500" alt={data.title || ''} referrerPolicy="no-referrer" />}
               </div>
             );
 
             const contentElement = (
               <div className="space-y-4 text-left">
-                <span className={`p-1 px-2.5 text-[9px] uppercase font-bold rounded tracking-widest inline-block font-mono ${
+                {data.subtitle && <span className={`p-1 px-2.5 text-[9px] uppercase font-bold rounded tracking-widest inline-block font-mono ${
                   isLight ? 'bg-rose-50 text-rose-700 border border-rose-100' : 'bg-rose-500/10 border border-rose-500/20 text-rose-400'
-                }`} style={{ color: isLight ? 'var(--primary-theme)' : undefined, borderColor: isLight ? 'rgba(var(--primary-rgb), 0.2)' : undefined }}>Artisan Spotlight</span>
-                <h3 className="font-display text-2xl sm:text-3xl font-semibold italic text-slate-900">{data.title}</h3>
-                <p className={`text-xs sm:text-sm leading-relaxed max-w-lg whitespace-pre-line ${isLight ? 'text-slate-600 font-medium' : 'text-slate-300'}`}>
-                  {data.content || data.subtitle}
-                </p>
+                }`} style={{ color: isLight ? 'var(--primary-theme)' : undefined, borderColor: isLight ? 'rgba(var(--primary-rgb), 0.2)' : undefined }}>{data.subtitle}</span>}
+                {data.title && <h3 className="font-display text-2xl sm:text-3xl font-semibold italic text-slate-900">{data.title}</h3>}
+                {data.content && (
+                  <p className={`text-xs sm:text-sm leading-relaxed max-w-lg whitespace-pre-line ${isLight ? 'text-slate-600 font-medium' : 'text-slate-300'}`}>
+                    {data.content}
+                  </p>
+                )}
                 {btnLabel && (
                   <div className="pt-2">
                     <a href={btnUrl} className={btnClasses} style={{ backgroundColor: isLight && btnStyle !== 'ghost' && btnStyle !== 'violet' ? 'var(--primary-theme)' : undefined }}>
@@ -471,7 +495,7 @@ export default function PageRenderer({
                   isLight ? 'bg-white border-rose-100/60 shadow-sm' : 'bg-[#0d0d0d] border-white/5'
                 }`} style={{ backgroundColor: isLight ? 'var(--theme-bg-card)' : undefined }}>
                   <div className="relative w-full aspect-[21/9] rounded-2.5xl overflow-hidden bg-slate-950 border border-white/5 shadow-md max-h-[250px]">
-                    <img src={data.imageUrl || 'https://images.unsplash.com/photo-1513151233558-d860c5398176?q=80&w=1200&auto=format&fit=crop'} className="w-full h-full object-cover" alt={data.title ? `${data.title} Banner View` : "Fulfillment Center Gift Showcase"} referrerPolicy="no-referrer" />
+                    {data.imageUrl && <img src={data.imageUrl} className="w-full h-full object-cover" alt={data.title || ''} referrerPolicy="no-referrer" />}
                   </div>
                   <div className="max-w-3xl text-left">
                     {contentElement}
@@ -486,7 +510,7 @@ export default function PageRenderer({
                   isLight ? 'bg-white border-rose-100' : 'bg-black border-white/5 shadow-xl'
                 }`}>
                   <div className="absolute inset-0">
-                    <img src={data.imageUrl || 'https://images.unsplash.com/photo-1513151233558-d860c5398176?q=80&w=1200&auto=format&fit=crop'} className={`w-full h-full object-cover ${isLight ? 'opacity-20' : 'opacity-50'}`} alt={data.title ? `${data.title} Custom Gifting Overlay Background` : "Gifting background overlay pattern"} referrerPolicy="no-referrer" />
+                    {data.imageUrl && <img src={data.imageUrl} className={`w-full h-full object-cover ${isLight ? 'opacity-20' : 'opacity-50'}`} alt={data.title || ''} referrerPolicy="no-referrer" />}
                     <div className={`absolute inset-0 ${isLight ? 'bg-gradient-to-r from-white via-white/80 to-transparent' : 'bg-gradient-to-r from-black via-black/70 to-transparent'}`} />
                   </div>
                   <div className={`relative max-w-lg backdrop-blur-md p-6 sm:p-8 rounded-2xl border space-y-4 ${
@@ -512,7 +536,7 @@ export default function PageRenderer({
             if (!data.youtubeId) return null;
             return (
               <section key={secKey} className="space-y-4 max-w-3xl mx-auto text-center">
-                <h3 className={`text-lg font-serif italic ${isLight ? 'text-slate-900 font-bold' : 'text-white'}`} style={{ color: isLight ? 'var(--primary-theme)' : undefined }}>{data.title || 'Experience Gifting Magic'}</h3>
+                {data.title && <h3 className={`text-lg font-serif italic ${isLight ? 'text-slate-900 font-bold' : 'text-white'}`} style={{ color: isLight ? 'var(--primary-theme)' : undefined }}>{data.title}</h3>}
                 <div className={`relative aspect-video rounded-2xl overflow-hidden shadow-md border ${
                   isLight ? 'bg-white border-rose-100' : 'bg-black border-white/5'
                 }`}>
@@ -528,63 +552,10 @@ export default function PageRenderer({
 
           /* SECTION: GOOGLE REVIEW ACCENT BADGES */
           case 'google_review': {
-            // 1. Start with pre-seeded reviews
-            const PRESEEDED_GOOGLE_REVIEWS = [
-              {
-                id: 'rev-1',
-                author: 'Sunita Pradhan',
-                rating: 5,
-                comment: 'The floral arrangement was absolutely pristine! Delivered exactly on time in Kathmandu. My parents loved the touch. Highly recommend Koseli Xpress!',
-                relativeDate: '2 days ago',
-                initials: 'SP',
-                avatarBg: 'bg-rose-700',
-                timestamp: 1717382400
-              },
-              {
-                id: 'rev-2',
-                author: 'Anish Shrestha',
-                rating: 5,
-                comment: 'Top-tier customer support. They coordinated the midnight delivery flawlessly. The quality of chocolates and custom gift wrapping was beautiful.',
-                relativeDate: '1 week ago',
-                initials: 'AS',
-                avatarBg: 'bg-emerald-700',
-                timestamp: 1716952800
-              },
-              {
-                id: 'rev-3',
-                author: 'Samikshya Thapa',
-                rating: 4,
-                comment: 'Very helpful builders. Loved the custom options. Slight courier delay but the presentation made up for it completely. Highly satisfied!',
-                relativeDate: '2 weeks ago',
-                initials: 'ST',
-                avatarBg: 'bg-[#E91E63]',
-                timestamp: 1716348000
-              },
-              {
-                id: 'rev-4',
-                author: 'Prajwal Karki',
-                rating: 5,
-                comment: 'Simply the best online gifting service in Nepal. The customizable gift hampers make it so easy to curate something personal and exquisite.',
-                relativeDate: '3 weeks ago',
-                initials: 'PK',
-                avatarBg: 'bg-amber-700',
-                timestamp: 1715743200
-              },
-              {
-                id: 'rev-5',
-                author: 'Meera Rajopadhyaya',
-                rating: 5,
-                comment: 'Beautiful presentation! Every flower was fresh and fragrantly bloomed. Easy payment options from out-of-country. Will definitely order again.',
-                relativeDate: '1 month ago',
-                initials: 'MR',
-                avatarBg: 'bg-blue-700',
-                timestamp: 1715138400
-              }
-            ];
-
             let reviewerList = data.reviewsList && data.reviewsList.length > 0
               ? [...data.reviewsList]
-              : [...PRESEEDED_GOOGLE_REVIEWS];
+              : [];
+            if (reviewerList.length === 0 && !data.title && !data.googleReviewUrl) return null;
 
             // Filter: Only 5-star reviews
             if (data.onlyFiveStars) {
@@ -632,13 +603,7 @@ export default function PageRenderer({
                         <span className={`text-[10px] uppercase font-semibold font-mono tracking-wide ml-1.5 group-hover/header:underline ${isLight ? 'text-slate-500 font-bold' : 'text-slate-400'}`}>Customer Trust Verified</span>
                         <ExternalLink className="w-2.5 h-2.5 text-slate-400 opacity-0 group-hover/header:opacity-100 transition-opacity ml-1 inline-block align-middle" />
                       </div>
-                      <h3 className={`text-xl sm:text-2xl font-serif italic tracking-wide group-hover/header:text-[#4285F4] transition-colors ${isLight ? 'text-slate-900 font-bold' : 'text-white'}`} style={{ color: isLight ? 'var(--primary-theme)' : undefined }}>{data.title || 'Excellent Google Reviews Rating'}</h3>
-                      <div className={`flex items-center gap-1 text-xs mt-0.5 ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
-                        <span className="text-rose-600 font-extrabold flex items-center gap-0.5 font-mono" style={{ color: isLight ? 'var(--primary-theme)' : undefined }}>
-                          <Star className="w-3.5 h-3.5 fill-rose-650 text-rose-500" style={{ fill: isLight ? 'var(--primary-theme)' : undefined, color: isLight ? 'var(--primary-theme)' : undefined }} /> 4.9 / 5
-                        </span>
-                        <span>• Based on 130+ deliveries in Nepal (Click to verify)</span>
-                      </div>
+                      {data.title && <h3 className={`text-xl sm:text-2xl font-serif italic tracking-wide group-hover/header:text-[#4285F4] transition-colors ${isLight ? 'text-slate-900 font-bold' : 'text-white'}`} style={{ color: isLight ? 'var(--primary-theme)' : undefined }}>{data.title}</h3>}
                     </a>
                   ) : (
                     <div className="space-y-1">
@@ -651,13 +616,7 @@ export default function PageRenderer({
                         <span className="font-extrabold text-[10px] uppercase font-mono tracking-widest text-[#EA4335]">e</span>
                         <span className={`text-[10px] uppercase font-semibold font-mono tracking-wide ml-1.5 ${isLight ? 'text-slate-500 font-bold' : 'text-slate-400'}`}>Customer Trust Verified</span>
                       </div>
-                      <h3 className={`text-xl sm:text-2xl font-serif italic tracking-wide ${isLight ? 'text-slate-900 font-bold' : 'text-white'}`} style={{ color: isLight ? 'var(--primary-theme)' : undefined }}>{data.title || 'Excellent Google Reviews Rating'}</h3>
-                      <div className={`flex items-center gap-1 text-xs mt-0.5 ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
-                        <span className="text-rose-600 font-extrabold flex items-center gap-0.5 font-mono" style={{ color: isLight ? 'var(--primary-theme)' : undefined }}>
-                          <Star className="w-3.5 h-3.5 fill-rose-650 text-rose-500" style={{ fill: isLight ? 'var(--primary-theme)' : undefined, color: isLight ? 'var(--primary-theme)' : undefined }} /> 4.9 / 5
-                        </span>
-                        <span>• Based on 130+ deliveries in Nepal</span>
-                      </div>
+                      {data.title && <h3 className={`text-xl sm:text-2xl font-serif italic tracking-wide ${isLight ? 'text-slate-900 font-bold' : 'text-white'}`} style={{ color: isLight ? 'var(--primary-theme)' : undefined }}>{data.title}</h3>}
                     </div>
                   )}
 
@@ -740,11 +699,7 @@ export default function PageRenderer({
                       );
                     })}
                     {reviewerList.length === 0 && (
-                      <div className={`w-full text-center py-8 text-xs italic rounded-2xl border ${
-                        isLight ? 'text-slate-500 bg-white border-rose-100' : 'text-slate-400 bg-[#0c0c0c] border-white/5'
-                      }`}>
-                        No reviews met current rating or comment constraints.
-                      </div>
+                      null
                     )}
                   </div>
                 </div>
@@ -755,11 +710,11 @@ export default function PageRenderer({
           /* SECTION: EXPANDABLE FAQS ACCORDION */
           case 'faq':
             const faqs = data.faqs || [];
+            if (faqs.length === 0 && !data.title) return null;
             return (
               <section key={secKey} className="max-w-2xl mx-auto space-y-6 text-left">
                 <div className="text-center space-y-1">
-                  <h3 className={`text-2xl font-serif italic tracking-wide ${isLight ? 'text-slate-900 font-bold' : 'text-white'}`} style={{ color: isLight ? 'var(--primary-theme)' : undefined }}>{data.title || 'Gifting Questions & Support'}</h3>
-                  <p className={`text-xs font-mono tracking-widest uppercase ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>Reliable details about scheduling support and customized boxes.</p>
+                  {data.title && <h3 className={`text-2xl font-serif italic tracking-wide ${isLight ? 'text-slate-900 font-bold' : 'text-white'}`} style={{ color: isLight ? 'var(--primary-theme)' : undefined }}>{data.title}</h3>}
                 </div>
 
                 <div className="space-y-2.5">
@@ -796,11 +751,12 @@ export default function PageRenderer({
           /* SECTION: CLIENT TESTIMONIALS BOARD REVIEWS */
           case 'reviews':
             const approvedReviews = state.reviews.filter(r => r.status === 'published');
+            if (approvedReviews.length === 0 && !data.title && !data.subtitle) return null;
             return (
               <section key={secKey} className="space-y-6">
                 <div className="text-center space-y-1">
-                  <h2 className={`text-2xl font-serif italic tracking-wide ${isLight ? 'text-slate-900 font-bold' : 'text-white'}`} style={{ color: isLight ? 'var(--primary-theme)' : undefined }}>{data.title || 'Voice of Givers & Receivers'}</h2>
-                  <p className={`text-xs font-mono tracking-widest uppercase ${isLight ? 'text-rose-700 font-bold' : 'text-amber-500/85'}`} style={{ color: isLight ? 'var(--secondary-theme)' : undefined }}>{data.subtitle || 'Real expressions shared by consumers in Nepal and the Nepalese diaspora.'}</p>
+                  {data.title && <h2 className={`text-2xl font-serif italic tracking-wide ${isLight ? 'text-slate-900 font-bold' : 'text-white'}`} style={{ color: isLight ? 'var(--primary-theme)' : undefined }}>{data.title}</h2>}
+                  {data.subtitle && <p className={`text-xs font-mono tracking-widest uppercase ${isLight ? 'text-rose-700 font-bold' : 'text-amber-500/85'}`} style={{ color: isLight ? 'var(--secondary-theme)' : undefined }}>{data.subtitle}</p>}
                 </div>
 
                 <ReviewsSlider 

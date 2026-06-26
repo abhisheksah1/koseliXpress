@@ -41,6 +41,10 @@ export default function ProductsTab({ state, onUpdateState }: ProductsTabProps) 
     setProductPage(1);
   }, [search, selectedCat, stockFilter, compositionFilter, statusFilter]);
 
+  const productMatchesCategory = (product: Product, categoryId: string) => {
+    return product.categoryId === categoryId || !!product.categoryIds?.includes(categoryId);
+  };
+
   const handleBulkAction = (action: 'publish' | 'draft' | 'delete') => {
     if (selectedProductIds.length === 0) return;
     
@@ -192,7 +196,7 @@ export default function ProductsTab({ state, onUpdateState }: ProductsTabProps) 
   const filteredProducts = state.products.filter(p => {
     if (p.status === ProductStatus.DELETED) return false;
     const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) || p.sku.toLowerCase().includes(search.toLowerCase());
-    const matchesCat = selectedCat ? p.categoryId === selectedCat : true;
+    const matchesCat = selectedCat ? productMatchesCategory(p, selectedCat) : true;
     
     // Evaluate actual stock status
     const actualStock = p.isHamper ? getProductStock(p, state.products) : p.stock;
@@ -1054,7 +1058,13 @@ export default function ProductsTab({ state, onUpdateState }: ProductsTabProps) 
                       <input
                         type="text"
                         value={editProduct.images?.join(', ') || ''}
-                        onChange={(e) => setEditProduct({ ...editProduct, images: e.target.value.split(',').map(s => s.trim()) })}
+                        onChange={(e) => setEditProduct({
+                          ...editProduct,
+                          images: e.target.value
+                            .split(/[,\n|;]/)
+                            .map(s => s.replace(/&amp;/g, '&').trim())
+                            .filter(Boolean)
+                        })}
                         className="w-full px-3 py-2 border border-slate-200 bg-white rounded-lg text-xs font-mono"
                         placeholder="Or input direct Unsplash URL links..."
                       />
@@ -1069,7 +1079,7 @@ export default function ProductsTab({ state, onUpdateState }: ProductsTabProps) 
                             <div key={i} className="p-2 border border-slate-150 rounded-xl flex items-center justify-between gap-3 bg-white hover:border-rose-200 transition">
                               <div className="flex items-center gap-3 overflow-hidden">
                                 <div className="relative shrink-0">
-                                  <img src={img} className="w-12 h-12 rounded-lg object-cover border shadow-xs" alt="" />
+                                  <img src={img.trim()} className="w-12 h-12 rounded-lg object-cover border shadow-xs" alt="" />
                                   <span className="absolute -top-1.5 -left-1.5 bg-slate-900 border border-white text-white font-mono text-[9px] font-extrabold w-5 h-5 rounded-full flex items-center justify-center shadow-xs">
                                     {i + 1}
                                   </span>
@@ -1856,12 +1866,21 @@ export default function ProductsTab({ state, onUpdateState }: ProductsTabProps) 
                       alert('Product template requires Name and SKU specifications.');
                       return;
                     }
+                    const categoryIds = Array.from(new Set([
+                      ...(editProduct.categoryIds || []),
+                      ...(editProduct.categoryId ? [editProduct.categoryId] : [])
+                    ].filter(Boolean)));
+                    const normalizedProduct = {
+                      ...editProduct,
+                      categoryId: editProduct.categoryId || categoryIds[0] || '',
+                      categoryIds
+                    } as Product;
                     const list = [...state.products];
-                    const idx = list.findIndex(prod => prod.id === editProduct.id);
+                    const idx = list.findIndex(prod => prod.id === normalizedProduct.id);
                     if (idx >= 0) {
-                      list[idx] = editProduct as Product;
+                      list[idx] = normalizedProduct;
                     } else {
-                      list.push(editProduct as Product);
+                      list.push(normalizedProduct);
                     }
                     onUpdateState({ ...state, products: list });
                     setEditProduct(null);

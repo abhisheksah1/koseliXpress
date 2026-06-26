@@ -258,8 +258,11 @@ export function parseProductsFromCSV(
 
   const rawHeaders = rows[0];
   const headerIndexMap: Record<string, number> = {};
+  const normalizeHeader = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
   rawHeaders.forEach((h, idx) => {
-    headerIndexMap[h.toLowerCase()] = idx;
+    const lowered = h.toLowerCase().trim();
+    headerIndexMap[lowered] = idx;
+    headerIndexMap[normalizeHeader(h)] = idx;
   });
 
   const products: Product[] = [];
@@ -269,10 +272,10 @@ export function parseProductsFromCSV(
   // Keys lists for flexible column mapping matching registry CSV columns
   const idKeys = ['id', 'product_id'];
   const nameKeys = ['product_name', 'name', 'title'];
-  const priceKeys = ['price', 'price_npr', 'selling_price'];
-  const crossedPriceKeys = ['crossed_price', 'compare_at_price', 'original_price'];
-  const costKeys = ['your_buying_cost', 'cost_price', 'costspri_cen_p_r', 'costpricenpr'];
-  const stockKeys = ['quantity', 'stock', 'inventory'];
+  const priceKeys = ['price', 'pricenpr', 'price_npr', 'sellingprice', 'selling_price', 'saleprice', 'sale_price', 'regularprice', 'regular_price'];
+  const crossedPriceKeys = ['crossedprice', 'crossed_price', 'compareatprice', 'compare_at_price', 'originalprice', 'original_price', 'mrp'];
+  const costKeys = ['yourbuyingcost', 'your_buying_cost', 'costprice', 'cost_price', 'costspri_cen_p_r', 'costpricenpr'];
+  const stockKeys = ['quantity', 'qty', 'stock', 'inventory', 'inventoryquantity', 'inventory_quantity'];
   const weightKeys = ['weight', 'product_weight'];
   const skuKeys = ['sku'];
   const barcodeKeys = ['barcode'];
@@ -282,23 +285,67 @@ export function parseProductsFromCSV(
   const sizeKeys = ['size', 'product_size'];
   const slugKeys = ['slug'];
   const statusKeys = ['status'];
-  const categoryKeys = ['product_category', 'categoryid', 'category', 'categories'];
-  const imageKeys = ['images', 'image_url', 'image'];
+  const categoryKeys = ['productcategory', 'product_category', 'categoryid', 'category', 'categories'];
+  const imageKeys = ['images', 'imageurl', 'image_url', 'image', 'imagesection', 'image_section', 'photourl', 'photo_url', 'photo', 'productimage', 'product_image', 'productimages', 'product_images', 'productimageurl', 'product_image_url', 'image1', 'image2', 'image3', 'imagesrc', 'image_src'];
   const descriptionKeys = ['product_description', 'description'];
   const isHamperKeys = ['is_hamper', 'true_hamper', 'ishamper'];
   const lowStockKeys = ['lowstockthreshold', 'low_stock_threshold', 'low_stock'];
+
+  const parseNumber = (value: string): number => {
+    const cleaned = value
+      .replace(/रू|rs\.?|npr|रु/gi, '')
+      .replace(/,/g, '')
+      .replace(/[^\d.-]/g, '')
+      .trim();
+    return parseFloat(cleaned);
+  };
+
+  const normalizeImageUrl = (value: string): string => {
+    const cleaned = value
+      .replace(/&amp;/g, '&')
+      .replace(/^["'\s]+|["'\s]+$/g, '')
+      .replace(/[)\].,;]+$/g, '')
+      .trim();
+    if (!cleaned) return '';
+    return cleaned.startsWith('//') ? `https:${cleaned}` : cleaned;
+  };
+
+  const splitImages = (value: string): string[] => {
+    const srcMatches = Array.from(value.matchAll(/src=["']([^"']+)["']/gi)).map(match => match[1]);
+    const urlMatches = Array.from(value.matchAll(/https?:\/\/[^\s,|;'"<>]+/gi)).map(match => match[0]);
+    const candidates = srcMatches.length > 0 || urlMatches.length > 0
+      ? [...srcMatches, ...urlMatches]
+      : value.split(/[,\n|;]/);
+
+    return Array.from(new Set(candidates.map(normalizeImageUrl).filter(Boolean)));
+  };
 
   for (let i = 1; i < rows.length; i++) {
     const rowValues = rows[i];
     
     const getVal = (keys: string[], defaultVal = ''): string => {
       for (const k of keys) {
-        const idx = headerIndexMap[k];
+        const idx = headerIndexMap[k] ?? headerIndexMap[normalizeHeader(k)];
         if (idx !== undefined && rowValues[idx] !== undefined) {
-          return rowValues[idx];
+          const value = rowValues[idx];
+          if (value !== '') return value;
         }
       }
       return defaultVal;
+    };
+
+    const getVals = (keys: string[]): string[] => {
+      const values: string[] = [];
+      const seenIndexes = new Set<number>();
+      for (const k of keys) {
+        const idx = headerIndexMap[k] ?? headerIndexMap[normalizeHeader(k)];
+        if (idx !== undefined && !seenIndexes.has(idx)) {
+          seenIndexes.add(idx);
+          const value = rowValues[idx]?.trim();
+          if (value) values.push(value);
+        }
+      }
+      return values;
     };
 
     const rawName = getVal(nameKeys);
@@ -338,14 +385,14 @@ export function parseProductsFromCSV(
 
     // Price handling with basic validation
     const rawPrice = getVal(priceKeys);
-    let parsedPrice = parseFloat(rawPrice);
+    let parsedPrice = parseNumber(rawPrice);
     if (isNaN(parsedPrice) || parsedPrice < 0) {
       parsedPrice = 0;
       warnings.push(`Row ${i + 1} (${rawName}): Invalid price expression "${rawPrice}". Defaulted to 0.`);
     }
 
     const rawCrossedPrice = getVal(crossedPriceKeys);
-    let parsedCrossedPrice = parseFloat(rawCrossedPrice) || 0;
+    let parsedCrossedPrice = parseNumber(rawCrossedPrice) || 0;
     if (isNaN(parsedCrossedPrice) || parsedCrossedPrice < 0) {
       parsedCrossedPrice = 0;
     }
@@ -359,7 +406,7 @@ export function parseProductsFromCSV(
     }
 
     const rawCost = getVal(costKeys);
-    let costPrice = parseFloat(rawCost);
+    let costPrice = parseNumber(rawCost);
     if (isNaN(costPrice) || costPrice < 0) {
       costPrice = 0;
       if (rawCost !== '' && rawCost !== '0') {
@@ -377,15 +424,15 @@ export function parseProductsFromCSV(
     const lowStockThreshold = parseInt(getVal(lowStockKeys)) || 2;
 
     const rawStatus = getVal(statusKeys);
-    const status = (rawStatus.toLowerCase() === 'active' || rawStatus.toLowerCase() === 'y' || rawStatus.toLowerCase() === 'true')
+    const status = (!rawStatus || rawStatus.toLowerCase() === 'active' || rawStatus.toLowerCase() === 'published' || rawStatus.toLowerCase() === 'publish' || rawStatus.toLowerCase() === 'y' || rawStatus.toLowerCase() === 'yes' || rawStatus.toLowerCase() === 'true')
       ? ProductStatus.ACTIVE
       : ProductStatus.DRAFT;
 
     const rawDescription = getVal(descriptionKeys) || '';
     const description = convertPlainTextToHTML(rawDescription);
-    const imagesStr = getVal(imageKeys);
-    const images = imagesStr
-      ? imagesStr.split(',').map(img => img.trim()).filter(Boolean)
+    const imagesValues = getVals(imageKeys);
+    const images = imagesValues.length > 0
+      ? imagesValues.flatMap(splitImages)
       : ['https://images.unsplash.com/photo-154946?q=80&w=600&auto=format&fit=crop'];
 
     const rawIsHamper = getVal(isHamperKeys);
@@ -398,7 +445,7 @@ export function parseProductsFromCSV(
     // Parse categories (Support multiple categories using "/" as the separator)
     const categoryStr = getVal(categoryKeys);
     const categoryNames = categoryStr
-      ? categoryStr.split('/').map(c => c.trim()).filter(Boolean)
+      ? categoryStr.split(/[/|,;>]+/).map(c => c.trim()).filter(Boolean)
       : [];
 
     if (categoryNames.length === 0) {
