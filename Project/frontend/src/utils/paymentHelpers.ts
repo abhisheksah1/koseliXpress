@@ -1,0 +1,112 @@
+/** Submit eSewa v2 payment form via POST redirect */
+export function submitEsewaForm(action: string, fields: Record<string, string>): void {
+  const form = document.createElement('form');
+  form.method = 'POST';
+  form.action = action;
+  form.style.display = 'none';
+  Object.entries(fields).forEach(([key, value]) => {
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = key;
+    input.value = value;
+    form.appendChild(input);
+  });
+  document.body.appendChild(form);
+  form.submit();
+}
+
+export async function initiateEsewaCheckout(params: {
+  amount: number;
+  transactionUuid: string;
+  successUrl?: string;
+  failureUrl?: string;
+}): Promise<void> {
+  const res = await fetch('/api/payment/initiate-esewa', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'eSewa initiation failed');
+  submitEsewaForm(data.action, data.fields);
+}
+
+export type KhaltiCustomerInfo = {
+  name: string;
+  email: string;
+  phone: string;
+};
+
+/** Khalti Web Checkout KPG-2 — server initiates, browser redirects to payment_url */
+export async function initiateKhaltiCheckout(params: {
+  amount: number;
+  purchaseOrderId: string;
+  purchaseOrderName: string;
+  returnUrl?: string;
+  websiteUrl?: string;
+  customerInfo?: KhaltiCustomerInfo;
+}): Promise<{ pidx?: string; payment_url?: string; environment?: string }> {
+  const phoneDigits = (params.customerInfo?.phone || '').replace(/\D/g, '').slice(-10);
+  const res = await fetch('/api/payment/initiate-khalti', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      amount: params.amount,
+      purchase_order_id: params.purchaseOrderId,
+      purchase_order_name: params.purchaseOrderName,
+      return_url: params.returnUrl || `${window.location.origin}/payment/khalti/callback`,
+      website_url: params.websiteUrl || window.location.origin,
+      customer_info: params.customerInfo
+        ? {
+            name: params.customerInfo.name,
+            email: params.customerInfo.email,
+            phone: phoneDigits.length === 10 ? phoneDigits : '9800000000',
+          }
+        : undefined,
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Khalti initiation failed');
+  if (data.payment_url) {
+    window.location.href = data.payment_url;
+    return data;
+  }
+  throw new Error('Khalti did not return a payment URL');
+}
+
+export type KhaltiVerifyResult = {
+  pidx: string;
+  total_amount: number;
+  status: string;
+  transaction_id: string | null;
+  fee: number;
+  refunded: boolean;
+  verified: boolean;
+  environment?: string;
+};
+
+/** Khalti KPG-2 lookup — confirm payment after callback redirect */
+export async function verifyKhaltiPayment(pidx: string): Promise<KhaltiVerifyResult> {
+  const res = await fetch('/api/payment/verify-khalti', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pidx }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Khalti verification failed');
+  return data as KhaltiVerifyResult;
+}
+
+export async function testPaymentGateway(gatewayId: string): Promise<{ ok: boolean; message: string; details?: unknown }> {
+  const res = await fetch(`/api/payment/test/${gatewayId}`, { method: 'POST' });
+  return res.json();
+}
+
+export async function syncPaymentGateways(paymentGateways: unknown[]): Promise<{ success: boolean; message?: string; error?: string }> {
+  const res = await fetch('/api/payment/sync-gateways', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ paymentGateways }),
+  });
+  return res.json();
+}

@@ -1,0 +1,135 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&family=Dancing+Script:wght@500;600;700&family=Inter:wght@400;500;600;700&family=Poppins:wght@300;400;500;600;700;800&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Cormorant Garamond", Georgia, "Times New Roman", serif;
+  --font-script: "Dancing Script", "Cormorant Garamond", cursive;
+  --font-serif: "Cormorant Garamond", Georgia, serif;
+  --font-sans: "Poppins", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Poppins", ui-monospace, monospace;
+  --color-brand-primary: #E91E63;
+  --color-brand-primary-dark: #C2185B;
+  --color-brand-primary-light: #FCE4EC;
+  --color-brand-bg: #FFFBFC;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--theme-bg-deep, #FFFBFC);
+  color: #334155;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+.font-script {
+  font-family: var(--font-script);
+}
+
+.hero-purple-gradient,
+.hero-brand-gradient {
+  background:
+    linear-gradient(135deg, #FFFBFC 0%, #FCE4EC 35%, #F8BBD0 70%, #FFF0F5 100%);
+}
+
+.hero-floral-pattern {
+  background-image: url("data:image/svg+xml,%3Csvg width='80' height='80' viewBox='0 0 80 80' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' stroke='%23E91E63' stroke-opacity='0.06' stroke-width='1'%3E%3Cpath d='M40 20c0 8-6 14-14 14s-14-6-14-14 6-14 14-14 14 6 14 14z'/%3E%3Cpath d='M54 44c0 6-4 10-10 10s-10-4-10-10 4-10 10-10 10 4 10 10z'/%3E%3Cpath d='M26 50c0 5-3 8-8 8s-8-3-8-8 3-8 8-8 8 3 8 8z'/%3E%3C/g%3E%3C/svg%3E");
+}
+
+.landing-gradient-mesh {
+  background:
+    radial-gradient(ellipse 80% 60% at 20% 10%, rgba(var(--primary-rgb, 233, 30, 99), 0.14), transparent 50%),
+    radial-gradient(ellipse 60% 50% at 80% 20%, rgba(var(--primary-rgb, 233, 30, 99), 0.08), transparent 45%),
+    radial-gradient(ellipse 50% 40% at 50% 100%, rgba(var(--primary-rgb, 233, 30, 99), 0.06), transparent 50%);
+}
+
+.premium-card {
+  background: var(--theme-bg-card, #ffffff);
+  border: 1px solid rgba(var(--primary-rgb, 233, 30, 99), 0.1);
+  box-shadow: 0 4px 24px -4px rgba(var(--primary-rgb, 233, 30, 99), 0.1);
+  border-radius: 1rem;
+}
+
+.premium-card:hover {
+  box-shadow: 0 12px 40px -8px rgba(var(--primary-rgb, 233, 30, 99), 0.18);
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.7s ease-out forwards;
+}
+
+/* Gift-themed lounge backdrop — boxes, bows, sparkles */
+.gift-lounge-pattern {
+  background-image: url("data:image/svg+xml,%3Csvg width='120' height='120' viewBox='0 0 120 120' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' stroke='%23a855f7' stroke-width='1.2' stroke-opacity='0.09'%3E%3Crect x='8' y='38' width='22' height='18' rx='2'/%3E%3Cpath d='M19 38V30M19 30c-2 0-3.5-1.5-3.5-3.2S17 24 19 24s3.5 1.5 3.5 3.2S21 30 19 30zM19 30c2 0 3.5-1.5 3.5-3.2S21 24 19 24s-3.5 1.5-3.5 3.2S17 30 19 30z'/%3E%3Cpath d='M8 44h22'/%3E%3C/g%3E%3Cg fill='none' stroke='%23E91E63' stroke-width='1' stroke-opacity='0.07' transform='translate(72 12)'%3E%3Cpath d='M12 0l2.5 7.5L22 10l-7.5 2.5L12 20l-2.5-7.5L2 10l7.5-2.5z'/%3E%3C/g%3E%3Cg fill='none' stroke='%23c084fc' stroke-width='1' stroke-opacity='0.08' transform='translate(48 72)'%3E%3Ccircle cx='10' cy='10' r='6'/%3E%3Cpath d='M10 4v12M4 10h12'/%3E%3C/g%3E%3Cg fill='none' stroke='%23E91E63' stroke-width='0.9' stroke-opacity='0.06' transform='translate(88 58)'%3E%3Cpath d='M8 14c0-4 3-7 7-7s7 3 7 7-3 7-7 7-7-3-7-7z'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 120px 120px;
+}
+
+.gift-lounge-card {
+  background: linear-gradient(145deg, #ffffff 0%, #fdf4ff 45%, #fff5f8 100%);
+  box-shadow: 0 4px 24px -6px rgba(168, 85, 247, 0.12), 0 1px 3px rgba(233, 30, 99, 0.06);
+}
+
+/* Premium checkout surfaces */
+.checkout-section-card {
+  background: #ffffff;
+  border: 1px solid rgba(233, 30, 99, 0.1);
+  border-radius: 1rem;
+  padding: 1.25rem;
+  box-shadow: 0 2px 16px -4px rgba(233, 30, 99, 0.08);
+}
+
+.checkout-drawer-shell {
+  background: linear-gradient(180deg, #FFFBFC 0%, #FFF5F8 100%);
+}
+
+.checkout-summary-panel {
+  background: linear-gradient(180deg, rgba(252, 228, 236, 0.35) 0%, rgba(255, 251, 252, 0.9) 100%);
+}
+
+.checkout-item-row {
+  background: linear-gradient(135deg, #FFF8FA 0%, #ffffff 100%);
+  border: 1px solid rgba(233, 30, 99, 0.08);
+  border-radius: 0.875rem;
+}
+
+.checkout-qty-control {
+  display: flex;
+  align-items: center;
+  border: 1px solid rgba(233, 30, 99, 0.15);
+  border-radius: 0.625rem;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.checkout-settlement-card {
+  background: linear-gradient(145deg, #ffffff 0%, #FFF8FA 100%);
+  border: 1px solid rgba(233, 30, 99, 0.18);
+  box-shadow: 0 8px 32px -8px rgba(233, 30, 99, 0.15);
+}
+
+.checkout-pay-btn {
+  background: linear-gradient(135deg, #E91E63 0%, #C2185B 100%);
+  box-shadow: 0 8px 24px -6px rgba(233, 30, 99, 0.45);
+}
+
+.checkout-pay-btn:hover {
+  background: linear-gradient(135deg, #C2185B 0%, #AD1457 100%);
+}
