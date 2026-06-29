@@ -1933,69 +1933,43 @@
       "duration": 33
     },
     {
-      "id": "vt-live-1782466019943-965",
-      "ip": "103.104.242.55",
+      "id": "vt-live-1782466945591-615",
+      "ip": "103.104.147.141",
       "country": "Nepal",
       "countryCode": "NP",
-      "timestamp": "2026-06-26T09:26:59.943Z",
+      "timestamp": "2026-06-26T09:42:25.591Z",
+      "pageSlug": "catalog",
+      "pageTitle": "Page: catalog",
+      "browser": "Chrome",
+      "os": "Windows",
+      "device": "Desktop",
+      "duration": 50
+    },
+    {
+      "id": "vt-live-1782467076561-817",
+      "ip": "103.104.216.233",
+      "country": "Nepal",
+      "countryCode": "NP",
+      "timestamp": "2026-06-26T09:44:36.561Z",
       "pageSlug": "home",
       "pageTitle": "Home Storefront",
       "browser": "Chrome",
       "os": "Windows",
       "device": "Desktop",
-      "duration": 43
+      "duration": 42
     },
     {
-      "id": "vt-live-1782466023490-144",
-      "ip": "103.104.244.130",
+      "id": "vt-live-1782467078692-263",
+      "ip": "103.104.32.171",
       "country": "Nepal",
       "countryCode": "NP",
-      "timestamp": "2026-06-26T09:27:03.490Z",
+      "timestamp": "2026-06-26T09:44:38.692Z",
       "pageSlug": "catalog",
       "pageTitle": "Page: catalog",
       "browser": "Chrome",
       "os": "Windows",
       "device": "Desktop",
-      "duration": 54
-    },
-    {
-      "id": "vt-live-1782466303810-224",
-      "ip": "103.104.121.219",
-      "country": "Nepal",
-      "countryCode": "NP",
-      "timestamp": "2026-06-26T09:31:43.810Z",
-      "pageSlug": "catalog",
-      "pageTitle": "Page: catalog",
-      "browser": "Chrome",
-      "os": "Windows",
-      "device": "Desktop",
-      "duration": 21
-    },
-    {
-      "id": "vt-live-1782466506488-93",
-      "ip": "103.104.109.211",
-      "country": "Nepal",
-      "countryCode": "NP",
-      "timestamp": "2026-06-26T09:35:06.488Z",
-      "pageSlug": "home",
-      "pageTitle": "Home Storefront",
-      "browser": "Chrome",
-      "os": "Windows",
-      "device": "Desktop",
-      "duration": 33
-    },
-    {
-      "id": "vt-live-1782466509277-6",
-      "ip": "103.104.161.236",
-      "country": "Nepal",
-      "countryCode": "NP",
-      "timestamp": "2026-06-26T09:35:09.277Z",
-      "pageSlug": "catalog",
-      "pageTitle": "Page: catalog",
-      "browser": "Chrome",
-      "os": "Windows",
-      "device": "Desktop",
-      "duration": 17
+      "duration": 48
     }
   ],
   "customerAuthConfig": {
@@ -2016,6 +1990,19 @@
   "supportChats": [],
   "specialDayReminders": [],
   "aiBlogs": [
+    {
+      "id": "blog-1782466933089",
+      "title": "The Ultimate Guide to chocolate gift",
+      "slug": "chocolate-gift",
+      "subject": "chocolate gift",
+      "content": "<h2>Discover the Best of chocolate gift</h2>\n        <p>Gifting is not just about material objects; it is about conveying your deepest emotions across distances. At <strong>Koseli Xpress</strong>, we represent that bridge of love and happiness across Nepal.</p>\n        <h3>Why Gifting Matters</h3>\n        <p>When you send gifts to Nepal from anywhere in the world, you are sharing a smiles. Here are some of our top tips:</p>\n        <ul>\n          <li><strong>Select Freshness:</strong> Opt for baked-on-delivery premium cakes and fresh-cut farm roses.</li>\n          <li><strong>Personalize:</strong> Always append custom printed cards containing your personal words.</li>\n          <li><strong>Reliable Dispatch:</strong> Ensure the courier guarantees express delivery directly to Kathmandu and beyond.</li>\n        </ul>\n        <p>Find everything you need to deliver happiness online today via Koseli Xpress!</p>",
+      "seoKeywords": "chocolate gift, gift guide nepal, koseli xpress blog",
+      "metaDescription": "Discover the ultimate guide to chocolate gift. Send the finest express hampers, cakes, and gifts across Nepal with Koseli Xpress.",
+      "status": "published",
+      "createdAt": "2026-06-26",
+      "author": "Koseli AI Assistant",
+      "imageUrl": "https://images.unsplash.com/photo-1549463010-14ec4a3f4e2c?q=80&w=1200&auto=format&fit=crop"
+    },
     {
       "id": "blog-1782455906560",
       "title": "Maximizing Joy: How to Celebrate gift delivery in nepal",

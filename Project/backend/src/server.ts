@@ -8,7 +8,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { connectDB, isMongoConnected } from './config/db.js';
 import { getApiStore, saveApiStore } from './services/apiStoreService.js';
-import { getAppState } from './services/appStateService.js';
+import { getAppState, syncLocalAppStateToMongo } from './services/appStateService.js';
 import { seedPaymentGatewaysFromEnv } from './services/paymentGatewayService.js';
 import {
   buildEsewaPaymentPayload,
@@ -1579,6 +1579,7 @@ app.post('/api/v1/orders', async (req, res) => {
 async function start() {
   const mongoConnected = await connectDB();
   if (mongoConnected) {
+    await syncLocalAppStateToMongo();
     await seedSuperAdmin();
   } else {
     console.warn('[Startup] Skipping MongoDB-only super admin seed while running in offline local-store mode.');

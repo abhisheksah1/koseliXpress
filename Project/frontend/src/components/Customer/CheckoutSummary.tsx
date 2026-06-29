@@ -244,7 +244,7 @@ export default function CheckoutSummary({
       {/* Premium Add-ons */}
       <div className="checkout-section-card space-y-3.5">
         <CheckoutSubheading>Premium Add-ons & Wrapping</CheckoutSubheading>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {(() => {
             const activeAndAllowedFees = state.serviceFees.filter(f => {
               if (!f.isActive) return false;
@@ -287,15 +287,15 @@ export default function CheckoutSummary({
               const currentInput = serviceFeeInputs[f.id] || { text: '', imageUrl: '' };
 
               return (
-                <div key={f.id} className="w-full space-y-2">
+                <div key={f.id} className={`w-full space-y-2 min-w-0 ${isChecked && f.inputType && f.inputType !== 'none' ? 'md:col-span-2' : ''}`}>
                   <label 
-                    className={`flex justify-between items-start gap-2 p-3 rounded-xl border select-none transition ${
+                    className={`flex flex-col sm:flex-row justify-between items-start gap-2 p-3 rounded-xl border select-none transition ${
                       isChecked 
                         ? 'bg-[#FCE4EC]/50 border-[#E91E63]/35 text-slate-800 font-semibold cursor-pointer' 
                         : 'bg-white border-pink-100 text-slate-700 hover:bg-[#FFF8FA] cursor-pointer'
                     }`}
                   >
-                    <div className="flex items-start gap-2.5 flex-1">
+                    <div className="flex items-start gap-2.5 flex-1 min-w-0">
                       <input
                         type="checkbox"
                         checked={isChecked}
@@ -308,18 +308,18 @@ export default function CheckoutSummary({
                         }}
                         className="w-4 h-4 rounded text-[#E91E63] focus:ring-[#E91E63] border-pink-200 cursor-pointer mt-0.5"
                       />
-                      <div className="flex-1">
+                      <div className="flex-1 min-w-0">
                         <span className="text-[11.5px] font-semibold text-slate-800 leading-snug block">{f.name}</span>
                       </div>
                     </div>
-                    <span className="font-mono text-[11px] text-[#E91E63] font-bold shrink-0 ml-2 mt-0.5">
+                    <span className="font-mono text-[11px] text-[#E91E63] font-bold shrink-0 sm:ml-2 mt-0.5">
                       +{selectedCurrency.symbol}{convertedFee.toLocaleString(undefined, { maximumFractionDigits: 1 })}
                     </span>
                   </label>
 
                   {/* Customer custom inputs section based on option type */}
                   {isChecked && f.inputType && f.inputType !== 'none' && (
-                    <div className="bg-white border border-rose-100 p-4 rounded-xl space-y-3.5 shadow-xs animate-in slide-in-from-top-1 duration-200 text-xs font-semibold text-slate-700 text-left">
+                    <div className="bg-white border border-rose-100 p-3 sm:p-4 rounded-xl space-y-3.5 shadow-xs animate-in slide-in-from-top-1 duration-200 text-xs font-semibold text-slate-700 text-left">
                       
                       {showTextInput && (
                         <div className="space-y-1.5">
@@ -356,9 +356,9 @@ export default function CheckoutSummary({
                             })()}
                           </label>
                           
-                          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3.5 bg-slate-50 p-2.5 rounded-lg border border-slate-250">
+                          <div className="grid grid-cols-1 sm:grid-cols-[72px_minmax(0,1fr)] items-stretch sm:items-center gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
                             {/* Image thumbnail placeholder */}
-                            <div className="w-14 h-14 bg-white rounded-lg border border-slate-200 flex items-center justify-center shrink-0 overflow-hidden relative shadow-2xs">
+                            <div className="w-full sm:w-16 h-28 sm:h-16 bg-white rounded-lg border border-slate-200 flex items-center justify-center shrink-0 overflow-hidden relative shadow-2xs">
                               {currentInput.imageUrl ? (
                                 <>
                                   <img 
@@ -385,12 +385,12 @@ export default function CheckoutSummary({
                                   </button>
                                 </>
                               ) : (
-                                <span className="text-[10px] text-slate-400 font-bold font-sans">No Photo</span>
+                                <span className="text-[10px] text-slate-400 font-bold font-sans text-center px-2">No Photo</span>
                               )}
                             </div>
 
                             {/* Upload controls */}
-                            <div className="flex-1 flex flex-col justify-center space-y-1">
+                            <div className="min-w-0 flex flex-col justify-center space-y-2">
                               <input
                                 type="file"
                                 accept="image/png, image/jpeg, image/jpg, image/webp"
@@ -457,10 +457,10 @@ export default function CheckoutSummary({
                                   }
                                 }}
                               />
-                              <div className="flex flex-wrap items-center gap-2">
+                              <div className="grid grid-cols-1 sm:flex sm:flex-wrap items-center gap-2">
                                 <label
                                   htmlFor={`file-customer-${f.id}`}
-                                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-[10px] uppercase tracking-wider rounded-lg shadow-xs transition cursor-pointer text-center"
+                                  className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-[10px] uppercase tracking-wider rounded-lg shadow-xs transition cursor-pointer text-center w-full sm:w-auto"
                                 >
                                   {currentInput.imageUrl ? "📸 Change Image" : "📸 Upload Photo"}
                                 </label>
@@ -476,14 +476,14 @@ export default function CheckoutSummary({
                                         }
                                       }));
                                     }}
-                                    className="px-2.5 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-[10px] uppercase tracking-wider rounded-lg transition cursor-pointer"
+                                    className="px-2.5 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-[10px] uppercase tracking-wider rounded-lg transition cursor-pointer w-full sm:w-auto"
                                   >
                                     Remove
                                   </button>
                                 )}
                               </div>
-                              <p className="text-[10px] leading-normal text-slate-400 font-medium">
-                                Accepted formats: **JPG, JPEG, PNG, WEBP**. Max recommended size 5MB.
+                              <p className="text-[10px] leading-relaxed text-slate-500 font-medium break-words">
+                                Accepted formats: JPG, JPEG, PNG, WEBP. Max recommended size 5MB.
                               </p>
                             </div>
                           </div>

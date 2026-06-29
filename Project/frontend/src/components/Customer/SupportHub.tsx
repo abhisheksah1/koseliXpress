@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { MessageCircle, Sparkles, Send, X, ExternalLink, RefreshCw, Heart, MessageSquare, PhoneCall, HelpCircle, Minus } from 'lucide-react';
+import { MessageCircle, Send, X, ExternalLink, RefreshCw, Heart, MessageSquare, PhoneCall, HelpCircle, Minus } from 'lucide-react';
 import { DatabaseState, Lead, LeadStatus } from '../../types';
 
 interface SupportHubProps {
@@ -380,7 +380,7 @@ export default function SupportHub({ state, onUpdateState, onAddToCart, onOpenCa
   const secondaryColor = state.appearance?.secondaryColor || '#E91E63';
 
   return (
-    <div className="fixed bottom-4 sm:bottom-6 right-4 sm:right-6 z-50 font-sans text-left flex flex-col items-end gap-3 pointer-events-none">
+    <div className="fixed bottom-3 sm:bottom-5 right-3 sm:right-5 z-50 font-sans text-left flex flex-col items-end gap-2.5 pointer-events-none">
       
       {/* ----------------- INTERACTIVE DRAWERS ----------------- */}
       <AnimatePresence>
@@ -390,54 +390,54 @@ export default function SupportHub({ state, onUpdateState, onAddToCart, onOpenCa
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.92, y: 30 }}
             transition={{ type: 'spring', damping: 25, stiffness: 220 }}
-            className="w-[calc(100vw-32px)] sm:w-[400px] h-[75vh] sm:h-[580px] max-h-[640px] bg-slate-50 border border-slate-200/80 rounded-2xl shadow-2xl flex flex-col overflow-hidden mb-2 pointer-events-auto"
+            className="w-[82vw] max-w-[320px] sm:w-[320px] md:w-[340px] h-[62vh] min-h-[390px] sm:h-[460px] md:h-[500px] max-h-[calc(100vh-96px)] bg-slate-50 border border-slate-200/80 rounded-2xl shadow-2xl flex flex-col overflow-hidden mb-2 pointer-events-auto"
           >
             {/* Header displaying user website logo clearly with white backdrop plate */}
-            <div className="p-4 bg-white text-slate-800 flex items-center justify-between shrink-0 relative border-b border-slate-100/80">
-              <div className="flex items-center gap-3">
+            <div className="p-3 bg-white text-slate-800 flex items-center justify-between shrink-0 relative border-b border-slate-100/80">
+              <div className="flex items-center gap-2 min-w-0">
                 {state.appearance?.siteLogo ? (
-                  <div className="p-1 px-2.5 bg-slate-50/50 border border-slate-200/50 rounded-xl flex items-center justify-center max-w-[150px] min-h-[38px] shadow-2xs">
+                  <div className="p-1 px-2 bg-slate-50/50 border border-slate-200/50 rounded-xl flex items-center justify-center max-w-[118px] min-h-[32px] shadow-2xs shrink-0">
                     <img
                       src={state.appearance.siteLogo}
                       alt={state.store?.storeName || 'Koseli Xpress'}
-                      className="h-8 w-auto object-contain max-h-8"
+                      className="h-6.5 w-auto object-contain max-h-7"
                       referrerPolicy="no-referrer"
                     />
                   </div>
                 ) : (
                   <div className="relative">
-                    <div className="w-10 h-10 rounded-xl flex items-center justify-center font-extrabold text-white text-sm shadow animate-pulse" style={{ backgroundColor: primaryColor }}>
+                    <div className="w-8 h-8 rounded-xl flex items-center justify-center font-extrabold text-white text-xs shadow animate-pulse" style={{ backgroundColor: primaryColor }}>
                       KX
                     </div>
                   </div>
                 )}
-                <div>
+                <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-[13px] font-extrabold uppercase tracking-widest leading-none" style={{ color: primaryColor }}>
+                    <span className="text-[11px] sm:text-[12px] font-extrabold uppercase tracking-widest leading-none" style={{ color: primaryColor }}>
                       CSR- AI
                     </span>
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                   </div>
-                  <p className="text-[11px] text-slate-400 font-bold leading-tight mt-1">Order & Pay via Chat (24/7)</p>
+                  <p className="text-[9px] sm:text-[10px] text-slate-400 font-bold leading-tight mt-1 truncate">Order & Pay via Chat</p>
                 </div>
               </div>
               <div className="flex items-center gap-1 shrink-0">
                 <button
                   type="button"
                   onClick={() => setActivePanel(null)}
-                  className="p-1 px-2.5 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition cursor-pointer flex items-center gap-1.5 border border-slate-200/50 bg-slate-50"
+                  className="p-1 px-2 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition cursor-pointer flex items-center gap-1 border border-slate-200/50 bg-slate-50"
                   title="Minimize Chat Panel"
                 >
-                  <Minus className="w-3.5 h-3.5" />
-                  <span className="text-[10px] font-black uppercase tracking-wider">Minimize</span>
+                  <Minus className="w-3 h-3" />
+                  <span className="hidden sm:inline text-[9px] font-black uppercase tracking-wider">Minimize</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setActivePanel(null)}
-                  className="p-1.5 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                  className="p-1 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
                   title="Close AI Assistant"
                 >
-                  <X className="w-5 h-5 bg-transparent border-none" />
+                  <X className="w-4.5 h-4.5 bg-transparent border-none" />
                 </button>
               </div>
             </div>
@@ -448,39 +448,39 @@ export default function SupportHub({ state, onUpdateState, onAddToCart, onOpenCa
             {/* Redesigned Urgent Human Assistance WhatsApp Bar with premium UI/UX */}
             <button
               onClick={triggerDirectWhatsappChat}
-              className="w-full px-4 py-3 bg-emerald-50 border-b border-emerald-100 hover:bg-emerald-100/40 active:bg-emerald-100 transition-all duration-200 flex items-center justify-between text-left shrink-0 cursor-pointer pointer-events-auto"
+              className="w-full px-3 py-2.5 bg-emerald-50 border-b border-emerald-100 hover:bg-emerald-100/40 active:bg-emerald-100 transition-all duration-200 flex items-center justify-between text-left shrink-0 cursor-pointer pointer-events-auto"
             >
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="w-8 h-8 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-600 shrink-0 shadow-2xs relative">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-7 h-7 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-600 shrink-0 shadow-2xs relative">
                   <span className="absolute inset-0 rounded-full bg-emerald-500/10 animate-ping opacity-60" />
-                  <svg viewBox="0 0 448 512" className="w-4.5 h-4.5 fill-current relative z-10" xmlns="http://www.w3.org/2000/svg">
+                  <svg viewBox="0 0 448 512" className="w-4 h-4 fill-current relative z-10" xmlns="http://www.w3.org/2000/svg">
                     <path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L3 480l117.7-30.9c32.4 17.7 68.9 27 106.1 27h.1c122.3 0 224.1-99.6 224.1-222 0-59.3-25.2-115-67.1-157zm-157 341.6c-33.2 0-65.7-8.9-94-25.7l-6.7-4-69.8 18.3L72 359.2l-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-84.9 184.6-186.6 184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-32.6-16.3-54-29.1-75.5-66-5.7-9.8 5.7-9.1 16.3-30.3 1.8-3.7.9-6.9-.5-9.7-1.4-2.8-12.5-30.1-17.1-41.2-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.8 35.2 15.2 49 16.5 66.6 13.9 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z" />
                   </svg>
                 </div>
                 <div className="space-y-0.5">
-                  <span className="text-[12px] font-black text-emerald-800 leading-tight block">
-                    Click here to get human assistance for urgent
+                  <span className="text-[10.5px] sm:text-[11px] font-black text-emerald-800 leading-tight block">
+                    Human assistance for urgent help
                   </span>
-                  <p className="text-[10px] text-emerald-600/80 font-bold tracking-tight">Direct Live Chat Back Link</p>
+                  <p className="text-[9px] text-emerald-600/80 font-bold tracking-tight">Direct WhatsApp live chat</p>
                 </div>
               </div>
-              <div className="w-7 h-7 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-600 shrink-0 ml-2 group-hover:bg-emerald-500/20 transition-all">
-                <svg className="w-4 h-4 transform group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="w-6 h-6 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-600 shrink-0 ml-2 group-hover:bg-emerald-500/20 transition-all">
+                <svg className="w-3.5 h-3.5 transform group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
                 </svg>
               </div>
             </button>
 
             {/* Message Pane with dynamic instant-checkout renderers */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50 relative">
+            <div className="flex-1 overflow-y-auto p-3 space-y-3 bg-slate-50 relative">
               {messages.map((m, idx) => (
                 <div
                   key={`chat-msg-${idx}`}
-                  className={`flex gap-2.5 max-w-[85%] ${m.role === 'user' ? 'ml-auto flex-row-reverse' : 'mr-auto'}`}
+                  className={`flex gap-2 max-w-[92%] ${m.role === 'user' ? 'ml-auto flex-row-reverse' : 'mr-auto'}`}
                 >
                   {m.role === 'assistant' && (
                     <div 
-                      className="w-7 h-7 rounded-lg text-white font-black text-[10px] flex items-center justify-center shrink-0 mt-1 select-none shadow-xs"
+                      className="w-6 h-6 rounded-lg text-white font-black text-[9px] flex items-center justify-center shrink-0 mt-1 select-none shadow-xs"
                       style={{ backgroundColor: primaryColor }}
                     >
                       AI
@@ -488,7 +488,7 @@ export default function SupportHub({ state, onUpdateState, onAddToCart, onOpenCa
                   )}
                   <div className="space-y-1">
                     <div
-                      className={`p-3.5 rounded-2xl text-[13.5px] leading-relaxed shadow-xs ${
+                      className={`p-3 rounded-2xl text-[12.5px] leading-relaxed shadow-xs ${
                         m.role === 'user'
                           ? 'bg-slate-100 text-slate-800 border border-slate-200/60 rounded-tr-none font-semibold'
                           : 'bg-white text-slate-800 border border-slate-100/90 rounded-tl-none font-medium'
@@ -508,14 +508,14 @@ export default function SupportHub({ state, onUpdateState, onAddToCart, onOpenCa
               ))}
 
               {isLoading && (
-                <div className="flex gap-2.5 max-w-[80%] mr-auto">
+                <div className="flex gap-2 max-w-[90%] mr-auto">
                   <div 
-                    className="w-7 h-7 rounded-lg text-white font-black text-[10px] flex items-center justify-center shrink-0 border border-white/10 mt-1 select-none"
+                    className="w-6 h-6 rounded-lg text-white font-black text-[9px] flex items-center justify-center shrink-0 border border-white/10 mt-1 select-none"
                     style={{ backgroundColor: primaryColor }}
                   >
                     AI
                   </div>
-                  <div className="p-3 bg-white text-slate-500 border border-slate-100 rounded-2xl rounded-tl-none text-[13px] flex items-center gap-2 font-medium shadow-xs">
+                  <div className="p-2.5 bg-white text-slate-500 border border-slate-100 rounded-2xl rounded-tl-none text-[12px] flex items-center gap-2 font-medium shadow-xs">
                     <RefreshCw className="w-3.5 h-3.5 animate-spin" style={{ color: primaryColor }} />
                     Typing...
                   </div>
@@ -532,13 +532,13 @@ export default function SupportHub({ state, onUpdateState, onAddToCart, onOpenCa
             </div>
 
             {/* Quick Chips Block */}
-            <div className="px-3 py-2.5 bg-slate-50 border-t border-slate-100 flex gap-2 overflow-x-auto whitespace-nowrap shrink-0 scrollbar-none">
+            <div className="px-2.5 py-2 bg-slate-50 border-t border-slate-100 flex gap-1.5 overflow-x-auto whitespace-nowrap shrink-0 scrollbar-none">
               {PRESET_CHIPS.map((chip, idx) => (
                 <button
                   key={`preset-chip-${idx}`}
                   onClick={() => handlePresetSelect(chip)}
                   disabled={isLoading}
-                  className="px-3 py-2 bg-white border border-slate-200 text-slate-705 rounded-full text-[12px] font-bold transition shrink-0 shadow-xs cursor-pointer disabled:opacity-50"
+                  className="px-2.5 py-1.5 bg-white border border-slate-200 text-slate-705 rounded-full text-[10.5px] font-bold transition shrink-0 shadow-xs cursor-pointer disabled:opacity-50"
                   onMouseEnter={(e) => {
                     e.currentTarget.style.borderColor = primaryColor;
                     e.currentTarget.style.color = primaryColor;
@@ -561,25 +561,25 @@ export default function SupportHub({ state, onUpdateState, onAddToCart, onOpenCa
                 e.preventDefault();
                 handleSendMessage(inputMsg);
               }}
-              className="p-3 bg-white border-t border-slate-100/90 flex gap-2 shrink-0 items-center w-full"
+              className="p-2.5 bg-white border-t border-slate-100/90 flex gap-2 shrink-0 items-center w-full"
             >
               <div 
-                className="flex-1 flex items-center bg-slate-50 border border-slate-200/80 rounded-2xl px-3 transition-all duration-200 focus-within:bg-white focus-within:border-emerald-500/40 focus-within:ring-2 focus-within:ring-emerald-500/10"
+                className="flex-1 min-w-0 flex items-center bg-slate-50 border border-slate-200/80 rounded-xl px-2.5 transition-all duration-200 focus-within:bg-white focus-within:border-emerald-500/40 focus-within:ring-2 focus-within:ring-emerald-500/10"
               >
                 <MessageSquare className="w-4 h-4 text-slate-400 mr-2 shrink-0 opacity-70" />
                 <input
                   type="text"
                   value={inputMsg}
                   onChange={(e) => setInputMsg(e.target.value)}
-                  placeholder="Order a Chocolate Cake, Roses, or Gift Basket..."
+                  placeholder="Type your message..."
                   disabled={isLoading}
-                  className="w-full py-3 bg-transparent text-[13px] font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-0 text-left border-none"
+                  className="w-full py-2.5 bg-transparent text-[12px] font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-0 text-left border-none"
                 />
               </div>
               <button
                 type="submit"
                 disabled={!inputMsg.trim() || isLoading}
-                className="w-11 h-11 rounded-2xl flex items-center justify-center transition-all cursor-pointer text-white shrink-0 hover:scale-[1.03] active:scale-[0.97] disabled:opacity-30 disabled:scale-100 disabled:hover:scale-100"
+                className="w-10 h-10 rounded-xl flex items-center justify-center transition-all cursor-pointer text-white shrink-0 hover:scale-[1.03] active:scale-[0.97] disabled:opacity-30 disabled:scale-100 disabled:hover:scale-100"
                 style={{ 
                   backgroundColor: inputMsg.trim() && !isLoading ? primaryColor : '#cbd5e1',
                   boxShadow: inputMsg.trim() && !isLoading ? `0 4px 12px ${primaryColor}15` : 'none'
@@ -618,30 +618,31 @@ export default function SupportHub({ state, onUpdateState, onAddToCart, onOpenCa
                 : 'text-white border-rose-200/50'
             }`}
             style={{ 
-              backgroundImage: `linear-gradient(to tr, ${primaryColor || '#E91E63'}, ${secondaryColor || '#f59e0b'})`,
-              boxShadow: '0 8px 30px rgba(209, 18, 82, 0.45)'
+              backgroundColor: '#ffffff',
+              boxShadow: `0 8px 30px ${primaryColor}33`,
+              borderColor: primaryColor
             }}
             title="KOSELI XPRESS - AI Support"
           >
             {activePanel === 'ai' ? (
-              <X className="w-6 h-6 text-white animate-in spin-in-90 duration-200" />
+                  <X className="w-6 h-6 animate-in spin-in-90 duration-200" style={{ color: primaryColor }} />
             ) : (
               <div className="relative flex items-center justify-center">
                 {state.appearance?.siteLogo ? (
                   <img
                     src={state.appearance.siteLogo}
                     alt="AI Support"
-                    className="w-8 h-8 object-contain rounded-full border border-white/20 bg-white/20"
+                    className="w-8 h-8 object-contain rounded-full border bg-white"
+                    style={{ borderColor: `${primaryColor}33` }}
                   />
                 ) : (
-                  <MessageCircle className="w-6 h-6 text-white" />
+                  <MessageCircle className="w-6 h-6" style={{ color: primaryColor }} />
                 )}
-                <Sparkles className="absolute -bottom-1.5 -right-1.5 w-4.5 h-4.5 text-amber-300 fill-amber-300 pointer-events-none" />
               </div>
             )}
             
             {activePanel !== 'ai' && (
-              <span className="absolute -top-1 -right-1 px-1.5 py-0.5 bg-amber-450 text-slate-950 font-black rounded-lg text-[7px] shadow uppercase tracking-wider scale-95 select-none" style={{ backgroundColor: primaryColor === '#f59e0b' ? '#E91E63' : '#f59e0b', color: '#fff' }}>
+              <span className="absolute -top-1 -right-1 px-1.5 py-0.5 text-white font-black rounded-lg text-[7px] shadow uppercase tracking-wider scale-95 select-none border border-white/30" style={{ backgroundColor: secondaryColor }}>
                 AI 24/7
               </span>
             )}

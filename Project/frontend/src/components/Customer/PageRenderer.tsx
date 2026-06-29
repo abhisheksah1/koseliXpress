@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
-import { DatabaseState, CustomPageSection, Product, Category, CurrencySettings } from '../../types';
+import { DatabaseState, CustomPageSection, Product, CurrencySettings, ProductStatus } from '../../types';
 import ProductCard from './ProductCard';
 import DeliveryCountdown from './DeliveryCountdown';
 import ReviewsSlider from './ReviewsSlider';
 import Footer from './Footer';
 import { Star, ChevronDown, ChevronUp, Sparkles, ExternalLink, Gift, Truck, Shield, Heart, Clock, MapPin, ArrowRight } from 'lucide-react';
+
+const fallbackPageBuilderImage = 'https://images.unsplash.com/photo-154946?q=80&w=1200&auto=format&fit=crop';
 
 interface PageRendererProps {
   sections: CustomPageSection[];
@@ -29,6 +31,7 @@ export default function PageRenderer({
   const isLight = state.appearance?.themeMode !== 'dark';
   const primary = state.appearance?.primaryColor || '#E91E63';
   const secondary = state.appearance?.secondaryColor || '#C2185B';
+  const isCustomerVisibleProduct = (product: Product) => product.status !== ProductStatus.DELETED;
   const normalizeCategoryKey = (value?: string) => (value || '').trim().toLowerCase();
   const getCategoryMatchKeys = (categoryIdOrSlug: string) => {
     const root = state.categories.find((cat) =>
@@ -67,6 +70,55 @@ export default function PageRenderer({
     });
     return productKeys.some(key => selectedKeys.has(key));
   };
+
+  const genericContentTypes = new Set(['slider', 'delivery_countdown', 'footer_builder']);
+  const hasGenericContent = (section: CustomPageSection) => {
+    const sectionData = section.data || {};
+    return Boolean(sectionData.title || sectionData.subtitle || sectionData.content || sectionData.buttonText);
+  };
+  const genericIntro = (section: CustomPageSection) => {
+    const sectionData = section.data || {};
+    if (!hasGenericContent(section)) return null;
+
+    return (
+      <div className="max-w-3xl mx-auto text-center space-y-3 pb-5">
+        {sectionData.subtitle && (
+          <p className="text-[11px] font-bold tracking-[0.25em] uppercase" style={{ color: secondary }}>
+            {sectionData.subtitle}
+          </p>
+        )}
+        {sectionData.title && (
+          <h2 className="font-display text-3xl sm:text-4xl font-semibold italic text-slate-900">
+            {sectionData.title}
+          </h2>
+        )}
+        {sectionData.content && (
+          <p className="text-sm sm:text-base leading-relaxed whitespace-pre-wrap text-slate-600">
+            {sectionData.content}
+          </p>
+        )}
+        {sectionData.buttonText && (
+          <a
+            href={sectionData.buttonUrl || '#'}
+            className="inline-flex items-center justify-center px-6 py-2.5 rounded-xl text-xs font-bold tracking-wider text-white transition hover:scale-[1.02]"
+            style={{ backgroundColor: primary }}
+          >
+            {sectionData.buttonText}
+          </a>
+        )}
+      </div>
+    );
+  };
+  const withGenericIntro = (section: CustomPageSection, content: React.ReactNode) => {
+    if (!genericContentTypes.has(section.type)) return content;
+    return (
+      <section key={section.id || `generic-${section.type}`} className="space-y-4">
+        {genericIntro(section)}
+        {content}
+      </section>
+    );
+  };
+
   return (
     <div className={`font-sans pb-16 ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>
       {sections.map((section, sectionIdx) => {
@@ -84,13 +136,13 @@ export default function PageRenderer({
           
           /* SECTION: PURPLE GIFT-SHOP HERO (reference layout) */
           case 'banner': {
-            const scriptTitle = (data as any).scriptTitle || '';
+            const scriptTitle = (data as any).scriptTitle || data.title || '';
             const boldSubtitle = (data as any).boldSubtitle || '';
             const heroNavLinks: string[] = (data as any).heroNavLinks || [];
             const pillTags: string[] = (data as any).pillTags || [];
             const heroImage = data.imageUrl || '';
 
-            if (!scriptTitle && !boldSubtitle && !data.subtitle && !data.buttonText && !heroImage && heroNavLinks.length === 0 && pillTags.length === 0) {
+            if (!scriptTitle && !boldSubtitle && !data.subtitle && !data.content && !data.buttonText && !heroImage && heroNavLinks.length === 0 && pillTags.length === 0) {
               return null;
             }
 
@@ -140,6 +192,12 @@ export default function PageRenderer({
                       {data.subtitle && (
                         <p className="text-sm sm:text-base text-slate-600 max-w-md leading-relaxed hidden sm:block">
                           {data.subtitle}
+                        </p>
+                      )}
+
+                      {data.content && (
+                        <p className="text-sm sm:text-base text-slate-600 max-w-md leading-relaxed whitespace-pre-wrap">
+                          {data.content}
                         </p>
                       )}
 
@@ -197,7 +255,7 @@ export default function PageRenderer({
           }
 
           case 'trust_strip': {
-            const items = data.items || [];
+            const items = (data as any).items || [];
             if (items.length === 0) return null;
             const iconMap: Record<string, React.ReactNode> = {
               truck: <Truck className="w-5 h-5" />,
@@ -225,7 +283,7 @@ export default function PageRenderer({
           }
 
           case 'features': {
-            const feats = data.items || [];
+            const feats = (data as any).items || [];
             if (feats.length === 0 && !data.title && !data.subtitle) return null;
             return wrap(
               <section className="py-16 sm:py-20">
@@ -276,19 +334,28 @@ export default function PageRenderer({
           case 'slider':
             const slides = data.images || [];
             if (slides.length === 0) return null;
-            return (
+            return withGenericIntro(section,
               <section key={secKey} className={`relative rounded-3xl overflow-hidden aspect-[21/9] border group shadow-sm ${
-                isLight ? 'bg-white border-rose-100/60' : 'bg-[#0d0d0d] border-white/5'
+                isLight ? 'bg-rose-50 border-rose-100/60' : 'bg-[#0d0d0d] border-white/5'
               }`}>
                 <img 
-                  src={slides[activeSlideIndex]} 
+                  src={slides[activeSlideIndex] || fallbackPageBuilderImage} 
                   className="w-full h-full object-cover transition-all duration-700 opacity-100" 
                   alt={data.title || `Slideshow frame ${activeSlideIndex + 1}`} 
                   referrerPolicy="no-referrer"
+                  onError={(e) => {
+                    e.currentTarget.src = fallbackPageBuilderImage;
+                  }}
                 />
                 
                 {/* Visual shade overlays */}
                 <div className={`absolute inset-0 ${isLight ? 'bg-black/10' : 'bg-black/40'}`} />
+                {(data.title || data.subtitle) && (
+                  <div className="absolute inset-x-0 bottom-0 p-5 sm:p-8 text-left bg-gradient-to-t from-black/65 to-transparent">
+                    {data.title && <h2 className="text-2xl sm:text-4xl font-serif italic font-bold text-white">{data.title}</h2>}
+                    {data.subtitle && <p className="text-xs sm:text-sm font-semibold text-white/85 mt-1">{data.subtitle}</p>}
+                  </div>
+                )}
 
                 <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-1.5">
                   {slides.map((_, dotIdx) => (
@@ -331,7 +398,7 @@ export default function PageRenderer({
             // 3. Optional Filter: Hide Empty Categories
             if (data.hideEmpty) {
               targetCategories = targetCategories.filter(c => {
-                const count = state.products.filter(p => productMatchesCategory(p, c.id) && p.status !== 'deleted').length;
+                const count = state.products.filter(p => productMatchesCategory(p, c.id) && isCustomerVisibleProduct(p)).length;
                 return count > 0;
               });
             }
@@ -341,7 +408,7 @@ export default function PageRenderer({
             if (activeSort === 'name') {
               targetCategories.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
             } else if (activeSort === 'product_count') {
-              const getCount = (cId: string) => state.products.filter(p => productMatchesCategory(p, cId) && p.status !== 'deleted').length;
+              const getCount = (cId: string) => state.products.filter(p => productMatchesCategory(p, cId) && isCustomerVisibleProduct(p)).length;
               targetCategories.sort((a, b) => getCount(b.id) - getCount(a.id));
             } else if (activeSort === 'latest') {
               targetCategories.sort((a, b) => {
@@ -367,7 +434,7 @@ export default function PageRenderer({
 
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
                   {targetCategories.map((cat, catIdx) => {
-                    const prodCount = state.products.filter(p => productMatchesCategory(p, cat.id) && p.status !== 'deleted').length;
+                    const prodCount = state.products.filter(p => productMatchesCategory(p, cat.id) && isCustomerVisibleProduct(p)).length;
                     return (
                       <div
                         key={`cat-grid-item-${cat.id || catIdx}`}
@@ -391,9 +458,14 @@ export default function PageRenderer({
           /* SECTION: DYNAMIC PRODUCTS SELECTION SHOWCASE GRID */
           case 'products_grid': {
             const prodIds = data.productIds || [];
-            let targetedProducts = prodIds.length > 0
-              ? state.products.filter(p => prodIds.includes(p.id) && p.status !== 'deleted')
-              : state.products.filter(p => p.status !== 'deleted' && p.status !== 'draft').slice(0, 6);
+            const visibleProducts = state.products.filter(isCustomerVisibleProduct);
+            const selectedVisibleProducts = prodIds.length > 0
+              ? visibleProducts.filter(p => prodIds.includes(p.id))
+              : [];
+            const targetedProducts = selectedVisibleProducts.length > 0
+              ? selectedVisibleProducts
+              : visibleProducts.slice(0, 6);
+            const selectedProductsUnavailable = prodIds.length > 0 && selectedVisibleProducts.length === 0;
             
             return wrap(
               <section className="py-16 sm:py-20 space-y-10">
@@ -415,7 +487,17 @@ export default function PageRenderer({
                       />
                     ))}
                   </div>
-                ) : null}
+                ) : (
+                  <div className={`rounded-2xl border p-6 text-center text-sm ${isLight ? 'border-rose-100 bg-white text-slate-500' : 'border-white/5 bg-white/[0.03] text-slate-400'}`}>
+                    Products selected for this section are not published yet.
+                  </div>
+                )}
+
+                {selectedProductsUnavailable && targetedProducts.length > 0 && (
+                  <p className="text-center text-xs text-slate-400">
+                    Showing currently active products because the selected products are unavailable.
+                  </p>
+                )}
               </section>
             );
           }
@@ -524,7 +606,7 @@ export default function PageRenderer({
 
             // Default 'left'
             return wrap(
-              <section id={data.sectionId || secKey} className={`grid grid-cols-1 md:grid-cols-2 gap-8 lg:gap-12 items-center p-6 sm:p-10 rounded-3xl premium-card`}>
+              <section id={(data as any).sectionId || secKey} className={`grid grid-cols-1 md:grid-cols-2 gap-8 lg:gap-12 items-center p-6 sm:p-10 rounded-3xl premium-card`}>
                 {imgElement}
                 {contentElement}
               </section>
@@ -534,7 +616,7 @@ export default function PageRenderer({
           /* SECTION: YOUTUBE VIDEO PLAYBACK */
           case 'video':
             if (!data.youtubeId) return null;
-            return (
+            return withGenericIntro(section,
               <section key={secKey} className="space-y-4 max-w-3xl mx-auto text-center">
                 {data.title && <h3 className={`text-lg font-serif italic ${isLight ? 'text-slate-900 font-bold' : 'text-white'}`} style={{ color: isLight ? 'var(--primary-theme)' : undefined }}>{data.title}</h3>}
                 <div className={`relative aspect-video rounded-2xl overflow-hidden shadow-md border ${
@@ -711,7 +793,7 @@ export default function PageRenderer({
           case 'faq':
             const faqs = data.faqs || [];
             if (faqs.length === 0 && !data.title) return null;
-            return (
+            return withGenericIntro(section,
               <section key={secKey} className="max-w-2xl mx-auto space-y-6 text-left">
                 <div className="text-center space-y-1">
                   {data.title && <h3 className={`text-2xl font-serif italic tracking-wide ${isLight ? 'text-slate-900 font-bold' : 'text-white'}`} style={{ color: isLight ? 'var(--primary-theme)' : undefined }}>{data.title}</h3>}
@@ -810,7 +892,7 @@ export default function PageRenderer({
                   </p>
                 )}
 
-                {data.buttonEnabled && data.buttonText && (
+                {data.buttonEnabled !== false && data.buttonText && (
                   <div className={`pt-3 ${
                     data.textAlignment === 'center' ? 'flex justify-center' :
                     data.textAlignment === 'right' ? 'flex justify-end' :
@@ -835,8 +917,10 @@ export default function PageRenderer({
           }
 
           /* SECTION: SECURED COMPILING CUSTOM CODE CONTAINER */
-          case 'code_embed':
-            return (
+          case 'code_embed': {
+            const codeEmbed = data.codeEmbed || '';
+            if (!data.title && !data.subtitle && !codeEmbed) return null;
+            return withGenericIntro(section,
               <section key={secKey} className="w-full py-6 text-left max-w-7xl mx-auto px-4">
                 {data.title && (
                   <div className={`mb-3 border-b pb-2 ${isLight ? 'border-rose-100' : 'border-white/[0.04]'}`}>
@@ -844,18 +928,21 @@ export default function PageRenderer({
                     {data.subtitle && <p className={`text-[10px] mt-0.5 ${isLight ? 'text-slate-500 font-medium' : 'text-slate-500'}`}>{data.subtitle}</p>}
                   </div>
                 )}
-                {data.codeEmbed && (
-                  <div 
-                    className="overflow-x-auto w-full"
-                    dangerouslySetInnerHTML={{ __html: data.codeEmbed }} 
+                {codeEmbed && (
+                  <iframe
+                    title={data.title || `Custom embed ${sectionIdx + 1}`}
+                    srcDoc={codeEmbed}
+                    sandbox="allow-scripts allow-popups allow-forms"
+                    className={`w-full min-h-[420px] rounded-2xl border ${isLight ? 'bg-white border-rose-100' : 'bg-slate-950 border-white/5'}`}
                   />
                 )}
               </section>
             );
+          }
 
           /* SECTION: DELIVERIES COUNTDOWN WIDGET */
           case 'delivery_countdown':
-            return (
+            return withGenericIntro(section,
               <DeliveryCountdown
                 key={secKey}
                 sec={section}
@@ -865,7 +952,7 @@ export default function PageRenderer({
 
           /* SECTION: DEDICATED COMPLIANCE FOOTER BUILDER */
           case 'footer_builder':
-            return (
+            return withGenericIntro(section,
               <Footer
                 key={secKey}
                 state={state}
@@ -874,7 +961,12 @@ export default function PageRenderer({
             );
 
           default:
-            return null;
+            if (!hasGenericContent(section)) return null;
+            return wrap(
+              <section className={`rounded-3xl border p-6 sm:p-10 ${isLight ? 'bg-white border-rose-100 shadow-sm' : 'bg-[#0d0d0d] border-white/5'}`}>
+                {genericIntro(section)}
+              </section>
+            );
         }
       })}
     </div>

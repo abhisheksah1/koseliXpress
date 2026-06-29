@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { DatabaseState, DynamicPage, CustomPageSection } from '../../types';
+import React, { useEffect, useState } from 'react';
+import { DatabaseState, DynamicPage, CustomPageSection, ProductStatus } from '../../types';
 import { Plus, Trash2, ArrowUp, ArrowDown, Settings, Edit3, Save, Sparkles, Navigation, Copy, Building } from 'lucide-react';
 import SEOAssistantWidget from './SEOAssistantWidget';
 
@@ -82,7 +82,20 @@ export default function PagesTab({ state, onUpdateState }: PagesTabProps) {
     return fallbackList;
   });
 
-  const activePage = state.pages.find(p => p.id === selectedPageId);
+  const activePage = state.pages.find(p => p.id === selectedPageId) || state.pages[0];
+
+  useEffect(() => {
+    if (state.pages.length === 0) {
+      if (selectedPageId) setSelectedPageId('');
+      return;
+    }
+
+    const selectedStillExists = state.pages.some(p => p.id === selectedPageId);
+    if (!selectedPageId || !selectedStillExists) {
+      const homePage = state.pages.find(p => p.slug === 'home');
+      setSelectedPageId(homePage?.id || state.pages[0].id);
+    }
+  }, [state.pages, selectedPageId]);
 
   // Save full page updates
   const handleUpdatePageFields = (updatedFields: Partial<DynamicPage>) => {
@@ -274,7 +287,10 @@ export default function PagesTab({ state, onUpdateState }: PagesTabProps) {
         break;
       case 'products_grid':
         defaultData.title = 'Weekly Special Collections';
-        defaultData.productIds = state.products.slice(0, 3).map(p => p.id);
+        defaultData.productIds = state.products
+          .filter(p => p.status !== ProductStatus.DELETED)
+          .slice(0, 3)
+          .map(p => p.id);
         break;
       case 'faq':
         defaultData.title = 'FAQ Guidance Accordion';
@@ -408,6 +424,22 @@ export default function PagesTab({ state, onUpdateState }: PagesTabProps) {
     setTimeout(() => {
       setSaveSuccessMsg(false);
     }, 4000);
+  };
+
+  const showSavedMessage = () => {
+    setSaveSuccessMsg(true);
+    setTimeout(() => {
+      setSaveSuccessMsg(false);
+    }, 4000);
+  };
+
+  const handleSaveActivePage = () => {
+    if (!activePage) return;
+    onUpdateState({
+      ...state,
+      pages: state.pages.map(page => page.id === activePage.id ? activePage : page)
+    });
+    showSavedMessage();
   };
 
   return (
@@ -576,9 +608,18 @@ export default function PagesTab({ state, onUpdateState }: PagesTabProps) {
                     <p className="text-xs text-slate-400 mt-0.5">Order, config, or append specific design blocks rendered directly on this page layout.</p>
                   </div>
 
-                  <div className="flex items-center gap-2 bg-slate-50 border p-1 rounded-xl">
-                    <span className="text-[9px] uppercase font-bold tracking-wider text-slate-400 pl-2">Publish Status:</span>
-                    <div className="flex items-center gap-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleSaveActivePage}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-extrabold uppercase tracking-wider transition cursor-pointer shadow-xs"
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      Save Page Now
+                    </button>
+                    <div className="flex items-center gap-2 bg-slate-50 border p-1 rounded-xl">
+                      <span className="text-[9px] uppercase font-bold tracking-wider text-slate-400 pl-2">Publish Status:</span>
+                      <div className="flex items-center gap-1">
                       <button
                         onClick={() => handleUpdatePageFields({ status: 'active' })}
                         className={`text-[10px] px-2.5 py-1 font-bold rounded-lg transition duration-150 cursor-pointer ${activePage.status === 'active' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-500 hover:bg-slate-155'}`}
@@ -591,6 +632,7 @@ export default function PagesTab({ state, onUpdateState }: PagesTabProps) {
                       >
                         🟡 Draft
                       </button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1031,7 +1073,7 @@ export default function PagesTab({ state, onUpdateState }: PagesTabProps) {
                                 <div className="md:col-span-2">
                                   <label className="block text-[9px] font-bold text-slate-400 mb-1 uppercase">Products checked to show on grid</label>
                                   <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                                    {state.products.filter(p => p.status !== 'deleted').map(p => {
+                                    {state.products.filter(p => p.status !== ProductStatus.DELETED).map(p => {
                                       const checked = (sec.data.productIds || []).includes(p.id);
                                       return (
                                         <label key={p.id} className="flex gap-1.5 items-center bg-slate-50 p-1.5 rounded border text-[11px] cursor-pointer">
@@ -2553,7 +2595,7 @@ export default function PagesTab({ state, onUpdateState }: PagesTabProps) {
           {/* Success notice banner */}
           {saveSuccessMsg && (
             <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold rounded-lg flex items-center gap-2 animate-bounce">
-              <span>✓ Navigation configuration successfully synchronized and rebuilt on the customer storefront live!</span>
+              <span>✓ Page builder changes saved and synchronized to the customer storefront.</span>
             </div>
           )}
 

@@ -1,6 +1,8 @@
 import mongoose from 'mongoose';
+import dns from 'dns';
 
 const DEFAULT_DB_NAME = 'koseli_xpress';
+const MONGO_DNS_SERVERS = ['1.1.1.1', '8.8.8.8'];
 
 function normalizeMongoUri(uri: string): string {
   const trimmed = uri.trim();
@@ -26,6 +28,9 @@ export async function connectDB(): Promise<boolean> {
   const uri = normalizeMongoUri(rawUri);
 
   try {
+    if (uri.startsWith('mongodb+srv://')) {
+      dns.setServers(MONGO_DNS_SERVERS);
+    }
     await mongoose.connect(uri, {
       serverSelectionTimeoutMS: 5000,
     });

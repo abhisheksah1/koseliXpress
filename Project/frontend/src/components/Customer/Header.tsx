@@ -143,6 +143,7 @@ export default function Header({
           {/* Left: Logo */}
           <div className="flex items-center shrink-0 min-w-0">
             <button
+              type="button"
               onClick={() => onNavigateToSlug('home')}
               className="flex items-center cursor-pointer group hover:opacity-90 transition focus:outline-none"
               aria-label="Home"
@@ -187,23 +188,25 @@ export default function Header({
               <Search className="w-5 h-5" />
             </button>
 
-            <div className="hidden lg:block relative group">
+            <div className="hidden lg:block relative group py-2 -my-2">
               <button type="button" className="h-10 px-3 rounded-full border border-slate-200 bg-white flex items-center gap-1.5 text-[12px] font-bold text-slate-700 hover:border-pink-200 hover:text-[#E91E63] cursor-pointer">
                 <Coins className="w-3.5 h-3.5" />
                 {selectedCurrency.code}
                 <ChevronDown className="w-3 h-3" />
               </button>
-              <div className="absolute right-0 top-full mt-2 bg-white border border-pink-100 rounded-xl shadow-xl hidden group-hover:block w-36 overflow-hidden z-50">
-                {state.currencies.map(curr => (
-                  <button
-                    key={curr.code}
-                    type="button"
-                    onClick={() => onSelectCurrency(curr)}
-                    className="w-full text-left px-3 py-2 text-slate-700 hover:bg-pink-50 text-[11px] font-semibold transition block cursor-pointer border-0 bg-transparent"
-                  >
-                    {curr.code} ({curr.symbol})
-                  </button>
-                ))}
+              <div className="absolute right-0 top-full pt-2 hidden group-hover:block z-[9999]">
+                <div className="bg-white border border-pink-100 rounded-xl shadow-2xl w-40 max-h-72 overflow-y-auto p-1.5">
+                  {state.currencies.map(curr => (
+                    <button
+                      key={curr.code}
+                      type="button"
+                      onClick={() => onSelectCurrency(curr)}
+                      className="w-full text-left px-3 py-2 text-slate-700 hover:bg-pink-50 hover:text-[#E91E63] rounded-lg text-[11px] font-semibold transition block cursor-pointer border-0 bg-transparent"
+                    >
+                      {curr.code} ({curr.symbol})
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -292,16 +295,16 @@ export default function Header({
 
       {/* Category navigation — compact live-site style */}
       {topLevelMenus.length > 0 && (
-      <div className="hidden md:block border-t border-slate-100 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <nav className="flex items-center justify-center gap-x-7 lg:gap-x-9 overflow-x-auto whitespace-nowrap py-3 text-[13px] font-semibold text-slate-700 scrollbar-hide">
+      <div className="hidden md:block border-t border-slate-100 bg-white relative z-60 overflow-visible">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 overflow-visible">
+          <nav className="flex flex-wrap items-center justify-center gap-x-7 gap-y-1 lg:gap-x-9 whitespace-nowrap py-3 text-[13px] font-semibold text-slate-700 overflow-visible">
             {topLevelMenus.map((link) => {
               const children = getChildrenForMenu(link.id);
               const hasSubs = children.length > 0;
 
               if (hasSubs) {
                 return (
-                  <div key={`hier-dropdown-${link.id}`} className="relative group py-1">
+                  <div key={`hier-dropdown-${link.id}`} className="relative group py-2 -my-2">
                     <button
                       onClick={() => handleLinkClick(link.title, link.url, link.categoryId)}
                       className="flex items-center gap-1 hover:text-[#E91E63] transition cursor-pointer font-semibold text-[13px] border-0 bg-transparent py-1 focus:outline-none"
@@ -309,7 +312,8 @@ export default function Header({
                       <span>{link.title}</span>
                       <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#E91E63] transition" />
                     </button>
-                    <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-white border border-pink-100 shadow-xl hidden group-hover:block w-56 overflow-hidden z-50 p-2 rounded-xl">
+                    <div className="absolute left-1/2 -translate-x-1/2 top-full pt-2 hidden group-hover:block z-[9999]">
+                      <div className="bg-white border border-pink-100 shadow-2xl w-60 overflow-hidden p-2 rounded-xl">
                       <div className="px-2.5 py-1.5 text-[9px] uppercase font-bold tracking-widest border-b border-pink-50 mb-1.5" style={{ color: primaryCol }}>
                         {link.title}
                       </div>
@@ -328,6 +332,7 @@ export default function Header({
                           {subLink.title}
                         </button>
                       ))}
+                      </div>
                     </div>
                   </div>
                 );

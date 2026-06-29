@@ -73,10 +73,15 @@ export default function App() {
     if (isAdminRoute()) return;
 
     const path = window.location.pathname.replace(/^\/+|\/+$/g, '');
-    if (!path || path === 'home') {
+    if (!path || path === 'home' || path === 'page/home' || path === 'pages/home') {
       setCurrentSlug('home');
       setSelectedCategoryFilter('');
       setSelectedBrandFilter('');
+      setCatalogSearch('');
+      setSelectedProductIdDetails(null);
+      if (window.location.pathname !== '/') {
+        window.history.replaceState({}, '', '/');
+      }
       return;
     }
 
@@ -372,6 +377,11 @@ export default function App() {
       }
     };
 
+    const handleInTabStoreSync = (event: Event) => {
+      const detail = (event as CustomEvent<DatabaseState>).detail;
+      if (detail) applyDatabaseState(detail);
+    };
+
     const handleFocusSync = () => {
       void refreshStorefrontState();
     };
@@ -383,6 +393,7 @@ export default function App() {
     };
 
     window.addEventListener('storage', handleStorageSync);
+    window.addEventListener('koseli-store-updated', handleInTabStoreSync);
     window.addEventListener('focus', handleFocusSync);
     window.addEventListener('pageshow', handleFocusSync);
     document.addEventListener('visibilitychange', handleVisibilitySync);
@@ -391,6 +402,7 @@ export default function App() {
     return () => {
       cancelled = true;
       window.removeEventListener('storage', handleStorageSync);
+      window.removeEventListener('koseli-store-updated', handleInTabStoreSync);
       window.removeEventListener('focus', handleFocusSync);
       window.removeEventListener('pageshow', handleFocusSync);
       document.removeEventListener('visibilitychange', handleVisibilitySync);
@@ -793,6 +805,7 @@ export default function App() {
   const handleUpdateDatabaseState = (newState: DatabaseState) => {
     setDbState(newState);
     saveDbState(newState);
+    window.dispatchEvent(new CustomEvent('koseli-store-updated', { detail: newState }));
     if (newState.paymentGateways) {
       fetch('/api/payment/sync-gateways', {
         method: 'POST',
@@ -881,6 +894,9 @@ export default function App() {
     setCurrentSlug(cleanSlug);
     setSelectedCategoryFilter('');
     setSelectedBrandFilter('');
+    setCatalogSearch('');
+    setSelectedProductIdDetails(null);
+    setCustomerProductPage(1);
     const nextPath = cleanSlug === 'home' ? '/' : `/${cleanSlug}`;
     if (window.location.pathname !== nextPath) {
       window.history.pushState({}, '', nextPath);
@@ -900,7 +916,8 @@ export default function App() {
   };
 
   // Switch dynamic layouts based on resolving active slug
-  const activePageConfig = dbState.pages.find(p => p.slug === currentSlug && p.status === 'active');
+  const activePageConfig = dbState.pages.find(p => p.slug === currentSlug);
+  const isCatalogView = currentSlug === 'catalog' || !!selectedCategoryFilter || !!selectedBrandFilter || !!catalogSearch;
 
   const normalizeCategoryKey = (value?: string) => (value || '').trim().toLowerCase();
   const getCategoryMatchKeys = (categoryIdOrSlug: string) => {
@@ -951,7 +968,7 @@ export default function App() {
 
   // Product listing matching filtration rules
   const catalogProductsBeforeSort = dbState.products.filter(p => {
-    if (p.status !== ProductStatus.ACTIVE) return false;
+    if (p.status === ProductStatus.DELETED) return false;
     const matchesCategory = selectedCategoryFilter 
       ? productMatchesSelectedCategory(p, selectedCategoryFilter)
       : true;
@@ -1469,7 +1486,7 @@ export default function App() {
           ) : (
             /* Primary View Area layout */
             <main className={`flex-grow w-full ${
-              currentSlug === 'home' && activePageConfig
+              currentSlug === 'home' && activePageConfig && !isCatalogView
                 ? 'max-w-none px-0 py-0'
                 : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8'
             }`}>
@@ -1481,7 +1498,7 @@ export default function App() {
                   onNavigateToSlug={navigateToSlug}
                   primaryColor={primaryColor}
                 />
-              ) : activePageConfig ? (
+              ) : activePageConfig && !isCatalogView ? (
               /* RENDER VISUAL LAYOUT DRAFT FROM PAGE BUILDER SCHEMA */
               <div className={currentSlug === 'home' ? 'space-y-0' : 'space-y-12'}>
                 {/* Visual header for non-home custom pages */}
@@ -1505,20 +1522,23 @@ export default function App() {
             ) : (
               /* RESOLVING TO GENERAL STORE CATALOG LISTING */
               <div className="space-y-6">
-                <div className="hidden lg:flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-white/5 pb-4 gap-4 text-left">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-rose-100/70 pb-4 gap-4 text-left bg-white/70 rounded-2xl px-4 py-4 shadow-sm">
                   <div>
-                    <h1 className="text-3xl font-serif italic text-white tracking-wide">
+                    <h1 className="text-3xl font-serif italic text-slate-900 tracking-wide">
                       {selectedCategoryFilter 
-                        ? selectedCategory?.name || ''
-                        : ''
+                        ? selectedCategory?.name || 'Catalog'
+                        : 'All Products'
                       }
                     </h1>
-                    <p className="text-xs text-amber-500/80 font-mono tracking-widest uppercase mt-1">
+                    <p className="text-xs text-rose-600/80 font-mono tracking-widest uppercase mt-1">
                       {selectedCategoryFilter 
-                        ? selectedCategory?.description || ''
-                        : ''
+                        ? selectedCategory?.description || `${catalogProducts.length} products available`
+                        : `${catalogProducts.length} products available`
                       }
                     </p>
+                  </div>
+                  <div className="px-3 py-1.5 rounded-full bg-rose-50 border border-rose-100 text-xs font-bold text-rose-700">
+                    {catalogProducts.length} product{catalogProducts.length === 1 ? '' : 's'} found
                   </div>
 
                   {/* Quick Filters breadcrumb reset */}
@@ -1708,6 +1728,58 @@ export default function App() {
           {/* DYNAMIC CATEGORY QUICK NAVIGATION BAR ABOVE FOOTER */}
           <div className="border-t border-rose-100/50 bg-[#FFFDFD]/85 py-7 mb-0 shrink-0">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-6">
+              {isCatalogView && (
+                <div id="customer-catalog-products" className="space-y-6 pb-8 border-b border-rose-100/60">
+                  <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 text-left">
+                    <div>
+                      <h2 className="text-2xl sm:text-3xl font-serif italic font-extrabold text-slate-900">
+                        {selectedCategory?.name || 'All Products'}
+                      </h2>
+                      <p className="text-xs font-mono uppercase tracking-widest text-rose-600 mt-1">
+                        {catalogProducts.length} product{catalogProducts.length === 1 ? '' : 's'} found
+                      </p>
+                    </div>
+                    {(selectedCategoryFilter || selectedBrandFilter || catalogSearch) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedCategoryFilter('');
+                          setSelectedBrandFilter('');
+                          setCatalogSearch('');
+                          navigateToSlug('catalog');
+                        }}
+                        className="self-start sm:self-auto px-4 py-2 text-xs font-bold rounded-xl bg-rose-50 border border-rose-100 text-rose-700 hover:bg-rose-100 transition"
+                      >
+                        View All Products
+                      </button>
+                    )}
+                  </div>
+
+                  {catalogProducts.length > 0 ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5 text-left">
+                      {paginatedCustomerProducts.map((prod, idx) => (
+                        <ProductCard
+                          key={`visible-catalog-prod-${prod.id || idx}-${idx}`}
+                          product={prod}
+                          selectedCurrency={selectedCurrency}
+                          deliveryGroups={dbState.deliveryGroups}
+                          onViewDetails={setSelectedProductIdDetails}
+                          onAddToCart={(p, e) => handleAddToCart(p, e)}
+                          allProducts={dbState.products}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="rounded-2xl border border-rose-100 bg-white p-10 text-center">
+                      <h3 className="font-serif italic text-lg font-bold text-slate-900">No products found</h3>
+                      <p className="text-xs text-slate-500 mt-1">
+                        No visible products match this category yet.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Browse Categories */}
               <div className="space-y-4">
                 <div className="flex items-center justify-center gap-2">

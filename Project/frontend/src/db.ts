@@ -1,8 +1,12 @@
-import { DatabaseState, Role } from './types';
+import { DatabaseState, DynamicPage, Role } from './types';
 import { createDefaultState } from './defaultState';
 import { buildEnvAdminUser, getEnvAdminCredentials } from './utils/adminAuth';
 
 export const DB_KEY = 'koseli_xpress_db';
+
+let pendingPersistState: DatabaseState | null = null;
+let persistTimer: ReturnType<typeof setTimeout> | null = null;
+let persistInFlight = false;
 
 async function persistToMongoDB(state: DatabaseState): Promise<void> {
   try {
@@ -19,13 +23,135 @@ async function persistToMongoDB(state: DatabaseState): Promise<void> {
   }
 }
 
+function schedulePersistToMongoDB(state: DatabaseState): void {
+  pendingPersistState = state;
+  if (persistTimer) clearTimeout(persistTimer);
+  persistTimer = null;
+  void flushPersistQueue();
+}
+
+async function flushPersistQueue(): Promise<void> {
+  if (persistInFlight) return;
+
+  persistInFlight = true;
+  try {
+    while (pendingPersistState) {
+      const nextState = pendingPersistState;
+      pendingPersistState = null;
+      await persistToMongoDB(nextState);
+    }
+  } finally {
+    persistInFlight = false;
+    if (pendingPersistState) {
+      void flushPersistQueue();
+    }
+  }
+}
+
+function isStoreApiPayload(value: unknown): value is DatabaseState {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Partial<DatabaseState>;
+  return !!candidate.store &&
+    !!candidate.appearance &&
+    Array.isArray(candidate.pages) &&
+    Array.isArray(candidate.products) &&
+    Array.isArray(candidate.categories);
+}
+
+function pageScore(page: DynamicPage): number {
+  const sections = page.sections || [];
+  const contentSize = sections.reduce((sum, section) => {
+    const data = section.data || {};
+    return sum + JSON.stringify(data).length;
+  }, 0);
+  return sections.length * 1000 + contentSize + JSON.stringify({
+    title: page.title,
+    metaTitle: page.metaTitle,
+    metaDescription: page.metaDescription,
+    metaKeywords: page.metaKeywords,
+    focusKeyword: page.focusKeyword
+  }).length;
+}
+
+function readLocalDbState(): DatabaseState | null {
+  try {
+    const raw = localStorage.getItem(DB_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as DatabaseState;
+    return isStoreApiPayload(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function mergeLocalAdminEdits(remote: DatabaseState, local: DatabaseState | null): { state: DatabaseState; changed: boolean } {
+  if (!local) return { state: remote, changed: false };
+
+  let changed = false;
+  const merged: DatabaseState = { ...remote };
+
+  const mergedPages = [...(remote.pages || [])];
+  for (const localPage of local.pages || []) {
+    const remoteIndex = mergedPages.findIndex(page => page.slug === localPage.slug || page.id === localPage.id);
+    if (remoteIndex < 0) {
+      mergedPages.push(localPage);
+      changed = true;
+      continue;
+    }
+
+    const remotePage = mergedPages[remoteIndex];
+    const localPageJson = JSON.stringify(localPage);
+    const remotePageJson = JSON.stringify(remotePage);
+    if (localPageJson !== remotePageJson && pageScore(localPage) >= pageScore(remotePage)) {
+      mergedPages[remoteIndex] = localPage;
+      changed = true;
+    }
+  }
+  if (changed) merged.pages = mergedPages;
+
+  const localNavCount = local.appearance?.navbarLinks?.length || 0;
+  const remoteNavCount = remote.appearance?.navbarLinks?.length || 0;
+  if (localNavCount > remoteNavCount) {
+    merged.appearance = {
+      ...merged.appearance,
+      navbarLinks: local.appearance.navbarLinks
+    };
+    changed = true;
+  }
+
+  const localProductCount = local.products?.length || 0;
+  const remoteProductCount = remote.products?.length || 0;
+  if (localProductCount > remoteProductCount) {
+    merged.products = local.products;
+    changed = true;
+  }
+
+  const localCategoryCount = local.categories?.length || 0;
+  const remoteCategoryCount = remote.categories?.length || 0;
+  if (localCategoryCount > remoteCategoryCount) {
+    merged.categories = local.categories;
+    changed = true;
+  }
+
+  return { state: merged, changed };
+}
+
 export async function loadDbState(): Promise<DatabaseState> {
   try {
+    const localBeforeRemote = readLocalDbState();
     const res = await fetch(`/api/store?ts=${Date.now()}`, { cache: 'no-store' });
     if (res.ok) {
-      const remote = (await res.json()) as DatabaseState;
-      const migratedRemote = applyMigrations(remote);
+      const remote = await res.json();
+      if (!isStoreApiPayload(remote)) {
+        throw new Error('Store API returned an invalid database payload');
+      }
+      const { state: mergedRemote, changed: recoveredLocalEdits } = mergeLocalAdminEdits(remote, localBeforeRemote);
+      const migratedRemote = applyMigrations(mergedRemote);
+      localStorage.removeItem(DB_KEY);
       localStorage.setItem(DB_KEY, JSON.stringify(migratedRemote));
+      if (recoveredLocalEdits) {
+        schedulePersistToMongoDB(migratedRemote);
+      }
       return migratedRemote;
     }
   } catch (err) {
@@ -221,7 +347,7 @@ function applyMigrations(parsed: DatabaseState, persistChanges = true): Database
   if (changed) {
     localStorage.setItem(DB_KEY, JSON.stringify(parsed));
     if (persistChanges) {
-      void persistToMongoDB(parsed);
+      schedulePersistToMongoDB(parsed);
     }
   }
 
@@ -248,12 +374,12 @@ export function getDbState(): DatabaseState {
 
 export function saveDbState(state: DatabaseState) {
   localStorage.setItem(DB_KEY, JSON.stringify(state));
-  void persistToMongoDB(state);
+  schedulePersistToMongoDB(state);
 }
 
 export function resetDbToPreset() {
   const fresh = createDefaultState();
   localStorage.setItem(DB_KEY, JSON.stringify(fresh));
-  void persistToMongoDB(fresh);
+  schedulePersistToMongoDB(fresh);
   return fresh;
 }

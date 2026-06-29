@@ -193,7 +193,7 @@ export default function ProductDetailModal({
   // Get automatic 4 recommended "You May Also Like" products in real-time based on categories and price
   const recommendedProducts = React.useMemo(() => {
     if (!product) return [];
-    const others = state.products.filter(p => p.id !== product.id && p.status === ProductStatus.ACTIVE);
+    const others = state.products.filter(p => p.id !== product.id && p.status !== ProductStatus.DELETED);
     
     const nameLower = (product.name || '').toLowerCase();
     const isCake = nameLower.includes('cake') || product.categoryId.includes('cake');

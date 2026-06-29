@@ -3310,9 +3310,24 @@ export default function SettingsTab({ state, onUpdateState }: SettingsTabProps) 
               <button
                 type="button"
                 onClick={() => {
+                  const updatedComplianceFooter = {
+                    ...(state.complianceFooter || {}),
+                    registeredBusinessName: appearanceForm.registeredBusinessName || complianceForm.registeredBusinessName || '',
+                    registrationNumber: appearanceForm.registrationNumber || complianceForm.registrationNumber || '',
+                    panVatNumber: appearanceForm.panVatNumber || complianceForm.panVatNumber || '',
+                    ecommerceNumber: appearanceForm.ecommerceNumber || complianceForm.ecommerceNumber || '',
+                    registeredOfficeAddress: appearanceForm.companyAddress || complianceForm.registeredOfficeAddress || '',
+                    headOfficeAddress: appearanceForm.companyAddress || complianceForm.headOfficeAddress || '',
+                    outlets: appearanceForm.outlets || complianceForm.outlets || '',
+                    supportEmail: appearanceForm.contactEmail || complianceForm.supportEmail || '',
+                    complianceOfficerName: appearanceForm.complainOfficerName || complianceForm.complianceOfficerName || '',
+                    complianceOfficerMobile: appearanceForm.complainOfficerPhone || complianceForm.complianceOfficerMobile || '',
+                    complianceOfficerEmail: appearanceForm.complainOfficerEmail || complianceForm.complianceOfficerEmail || '',
+                  };
                   onUpdateState({
                     ...state,
-                    appearance: appearanceForm
+                    appearance: appearanceForm,
+                    complianceFooter: updatedComplianceFooter
                   });
                   alert('🎉 Branding & Layout state configurations successfully synchronized to LocalStorage and public view canvases!');
                 }}
@@ -4655,6 +4670,50 @@ export default function SettingsTab({ state, onUpdateState }: SettingsTabProps) 
                     placeholder="e.g. ISO 9001:2015 Certified"
                   />
                 </div>
+              </div>
+            </div>
+
+            {/* Sub section: Footer Color Controls */}
+            <hr className="border-slate-100" />
+            <div className="space-y-4">
+              <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider text-rose-700">Footer Color Theme</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Footer Background Color</label>
+                  <input
+                    type="color"
+                    value={complianceForm.footerBackgroundColor || state.appearance?.primaryColor || '#E91E63'}
+                    onChange={(e) => setComplianceForm({ ...complianceForm, footerBackgroundColor: e.target.value })}
+                    className="w-full h-10 p-1 border rounded-lg bg-white cursor-pointer"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Footer Secondary Color</label>
+                  <input
+                    type="color"
+                    value={complianceForm.footerSecondaryColor || state.appearance?.secondaryColor || '#C2185B'}
+                    onChange={(e) => setComplianceForm({ ...complianceForm, footerSecondaryColor: e.target.value })}
+                    className="w-full h-10 p-1 border rounded-lg bg-white cursor-pointer"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Footer Text/Icon Color</label>
+                  <input
+                    type="color"
+                    value={complianceForm.footerTextColor || '#ffffff'}
+                    onChange={(e) => setComplianceForm({ ...complianceForm, footerTextColor: e.target.value })}
+                    className="w-full h-10 p-1 border rounded-lg bg-white cursor-pointer"
+                  />
+                </div>
+              </div>
+              <div
+                className="rounded-xl p-4 text-white text-xs font-bold"
+                style={{
+                  background: `linear-gradient(135deg, ${complianceForm.footerBackgroundColor || state.appearance?.primaryColor || '#E91E63'}, ${complianceForm.footerSecondaryColor || state.appearance?.secondaryColor || '#C2185B'})`,
+                  color: complianceForm.footerTextColor || '#ffffff'
+                }}
+              >
+                Footer color preview. Click Save Compliance Settings to publish this footer theme.
               </div>
             </div>
 

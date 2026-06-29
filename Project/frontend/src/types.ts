@@ -729,6 +729,11 @@ export interface ComplianceFooterConfig {
   // Logo config
   logoUrl?: string;
   logoWidth?: number;
+
+  // Footer theme colors
+  footerBackgroundColor?: string;
+  footerSecondaryColor?: string;
+  footerTextColor?: string;
 }
 
 export interface SmtpSettings {

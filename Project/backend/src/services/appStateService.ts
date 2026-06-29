@@ -8,10 +8,25 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const LOCAL_STORE_DIR = path.resolve(__dirname, '../../.local-store');
 const LOCAL_APP_STATE_FILE = path.join(LOCAL_STORE_DIR, 'app-state.json');
 
+function parseJsonWithTrailingRecovery(raw: string): Record<string, unknown> | null {
+  try {
+    return JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    for (let idx = raw.lastIndexOf('}') - 1; idx > 0; idx = raw.lastIndexOf('}', idx - 1)) {
+      try {
+        return JSON.parse(raw.slice(0, idx + 1)) as Record<string, unknown>;
+      } catch {
+        // Keep scanning for the end of the last complete object.
+      }
+    }
+    return null;
+  }
+}
+
 async function readLocalAppState(): Promise<Record<string, unknown> | null> {
   try {
     const raw = await fs.readFile(LOCAL_APP_STATE_FILE, 'utf8');
-    return JSON.parse(raw) as Record<string, unknown>;
+    return parseJsonWithTrailingRecovery(raw);
   } catch {
     return null;
   }
@@ -19,7 +34,9 @@ async function readLocalAppState(): Promise<Record<string, unknown> | null> {
 
 async function writeLocalAppState(data: Record<string, unknown>): Promise<void> {
   await fs.mkdir(LOCAL_STORE_DIR, { recursive: true });
-  await fs.writeFile(LOCAL_APP_STATE_FILE, JSON.stringify(data, null, 2), 'utf8');
+  const tempFile = `${LOCAL_APP_STATE_FILE}.tmp`;
+  await fs.writeFile(tempFile, JSON.stringify(data, null, 2), 'utf8');
+  await fs.rename(tempFile, LOCAL_APP_STATE_FILE);
 }
 
 export async function getAppState(): Promise<Record<string, unknown> | null> {
@@ -40,6 +57,55 @@ export async function saveAppState(data: Record<string, unknown>): Promise<void>
     { data },
     { upsert: true, new: true }
   );
+}
+
+function hasStorefrontData(data: Record<string, unknown> | null): boolean {
+  return !!data && (
+    (Array.isArray(data.pages) && data.pages.length > 0) ||
+    (Array.isArray(data.products) && data.products.length > 0) ||
+    (Array.isArray(data.categories) && data.categories.length > 0)
+  );
+}
+
+export async function syncLocalAppStateToMongo(): Promise<boolean> {
+  if (!isMongoConnected()) return false;
+
+  const localState = await readLocalAppState();
+  if (!hasStorefrontData(localState)) return false;
+
+  const mongoState = await getAppState();
+  const mergedState: Record<string, unknown> = { ...(mongoState ?? {}) };
+  let changed = false;
+
+  for (const key of ['pages', 'products', 'categories']) {
+    const localItems = localState[key];
+    const mongoItems = mongoState?.[key];
+    if (
+      Array.isArray(localItems) &&
+      localItems.length > 0 &&
+      (!Array.isArray(mongoItems) || localItems.length > mongoItems.length)
+    ) {
+      mergedState[key] = localItems;
+      changed = true;
+    }
+  }
+
+  for (const key of ['store', 'appearance', 'paymentMethods', 'shippingZones']) {
+    if (localState[key] && !mongoState?.[key]) {
+      mergedState[key] = localState[key];
+      changed = true;
+    }
+  }
+
+  if (!changed) return false;
+
+  await AppStateModel.findOneAndUpdate(
+    { key: 'main' },
+    { data: mergedState },
+    { upsert: true, new: true }
+  );
+  console.log('[Store] Synced local-store app-state into MongoDB.');
+  return true;
 }
 
 export async function appendVisitorTrack(track: Record<string, unknown>, maxTracks = 500): Promise<void> {
