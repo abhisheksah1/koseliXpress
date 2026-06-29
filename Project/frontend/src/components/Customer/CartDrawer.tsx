@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { DatabaseState, Product, CurrencySettings, CartItem, Order, OrderStatus, Lead, LeadStatus } from '../../types';
 import { ShoppingBag, X, CheckCircle2, CreditCard, Trash2, Plus, Minus, ArrowRight, Gift } from 'lucide-react';
-import { isProductOutOfStock } from '../../utils/stockUtils';
+import { getProductStock, isProductOutOfStock } from '../../utils/stockUtils';
 import CheckoutForms from './CheckoutForms';
 import CheckoutSummary from './CheckoutSummary';
 import GiftLoungeBackdrop from './GiftLoungeBackdrop';
@@ -334,13 +334,13 @@ export default function CartDrawer({
       !paymentMethod ||
       !isPaymentGatewaySelectable(state.paymentGateways, selectedCurrency.code, paymentMethod)
     ) {
-      alert('Please choose an available payment method. Disabled options must be enabled by the store admin.');
+      alert('Please choose an available payment method. If you need help, contact us on WhatsApp.');
       return;
     }
 
     const activeGw = (state.paymentGateways || []).find(g => g.id === paymentMethod);
     if (activeGw && !activeGw.isEnabled) {
-      alert('This payment method is currently disabled by admin. Please select another option.');
+      alert('This payment method is currently unavailable. Please select another option.');
       return;
     }
 
@@ -350,7 +350,7 @@ export default function CartDrawer({
     if (paymentMethod === 'khalti') {
       if (!hasApiCredentials) {
         alert(
-          'Khalti is not fully configured. The store admin must add a Live Secret Key under Admin → Settings → Payment Gateways, then Save & Sync.',
+          'Khalti is currently unavailable. Please choose another payment method or contact us on WhatsApp.',
         );
         return;
       }
@@ -370,7 +370,7 @@ export default function CartDrawer({
     if (paymentMethod === 'esewa') {
       if (!hasApiCredentials) {
         alert(
-          'eSewa is not fully configured. The store admin must add merchant code and secret key under Admin → Settings → Payment Gateways.',
+          'eSewa is currently unavailable. Please choose another payment method or contact us on WhatsApp.',
         );
         return;
       }
@@ -451,7 +451,7 @@ export default function CartDrawer({
     } catch (err: unknown) {
       setIsVerifyingPaymentFlow(false);
       setIsRedirectingPayment(false);
-      alert(`Khalti error: ${err instanceof Error ? err.message : 'Payment failed'}. Check Admin → Payment Gateways → Test Connection.`);
+      alert(`Khalti payment could not start: ${err instanceof Error ? err.message : 'Payment failed'}. Please choose another payment method or contact us on WhatsApp.`);
     }
   };
 
@@ -481,7 +481,7 @@ export default function CartDrawer({
         return;
       }
       if (!activeGateway.merchantId || !activeGateway.secretKey) {
-        alert('NPS Gateway Configuration Error: The Merchant ID and Secret Key must be configured by the Admin in administrative settings to securely verify card handshakes.');
+        alert('Card payment is currently unavailable. Please choose another payment method or contact us on WhatsApp.');
         return;
       }
       
@@ -570,7 +570,7 @@ export default function CartDrawer({
     if (paymentMethod === 'nps') {
       setIsVerifyingPaymentFlow(true);
       setPaymentVerificationLog([]);
-      setPaymentVerificationStatus("Configuring secure proxy tunnel...");
+      setPaymentVerificationStatus("Connecting to secure payment...");
 
       // Generate a highly unique, non-colliding transaction ID using timestamp
       const tempRefId = `${state.store.orderPrefix || 'KO'}${Date.now()}`;
@@ -582,9 +582,9 @@ export default function CartDrawer({
         setPaymentVerificationLog([...logs]);
       };
 
-      addLog("Initializing secure proxy handshake with Nepal Payment Solution...");
-      addLog(`Targeting dynamic merchant context: Merchant ID (${activeGateway?.merchantId || 'N/A'})`);
-      addLog(`Generating alphabetical Sorted Signature: MerchantId, MerchantName, Amount (${grandTotalConverted}), MerchantTxnId (${tempRefId})`);
+      addLog("Connecting to Nepal Payment Solution...");
+      addLog("Preparing your secure payment request...");
+      addLog(`Confirming payment amount: ${selectedCurrency.symbol} ${grandTotalConverted.toLocaleString(undefined, { maximumFractionDigits: 1 })}`);
 
       fetch('/api/payment/initiate-nps', {
         method: 'POST',
@@ -616,7 +616,7 @@ export default function CartDrawer({
         if (data.data && data.data.ProcessId) {
           addLog(`[Success] Process ID retrieved: ${data.data.ProcessId}`);
         } else {
-          addLog(`[Info] No Process ID returned. Handshake completed.`);
+          addLog(`[Info] Secure payment session prepared.`);
         }
         addLog(`Authenticating customer's Visa/Mastercard credentials via NICAsia gateway portal...`);
         addLog(`Contacting bank issuer secure node for authorization code...`);
@@ -627,7 +627,7 @@ export default function CartDrawer({
         }, 1550);
       })
       .catch(err => {
-        addLog(`[Error] Remote NPS API Handshake failed: ${err.message}`);
+        addLog(`[Error] Payment connection failed: ${err.message}`);
         
         const isLive = activeGateway?.apiEnvironment === 'live';
         if (isLive) {
@@ -636,9 +636,9 @@ export default function CartDrawer({
           setIsVerifyingPaymentFlow(false);
           alert(`NPS Payment Gateway Failure: ${err.message}. Please verify settings or use another card.`);
         } else {
-          addLog(`[Notice] Offline Sandbox Simulator activated...`);
-          addLog(`[Sim] Checking transaction integrity block with mock token...`);
-          addLog(`[Sim] Handshake successfully authorized! Settle Rs. ${grandTotalConverted}...`);
+          addLog(`[Notice] Test payment mode active...`);
+          addLog(`[Info] Checking transaction details...`);
+          addLog(`[Success] Payment verified for Rs. ${grandTotalConverted}...`);
 
           setTimeout(() => {
             completeOrderCreation(products, tempRefId, { paymentVerified: true });
@@ -857,13 +857,13 @@ export default function CartDrawer({
               <p className="text-xs leading-relaxed max-w-sm mx-auto text-slate-650">
                 Your boutique handwrapped package reference number is{" "}
                 <span className="font-mono text-rose-600 font-extrabold underline decoration-dotted">{orderSummaryRef}</span>.
-                We have registered your contact tracks and mapped dispatch nodes.
+                Our team will confirm the delivery details and prepare your gift shortly.
               </p>
             </div>
 
             <div className="p-4 bg-white border border-rose-100 rounded-2xl max-w-sm mx-auto w-full text-left space-y-3 shadow-xs">
               <div className="text-[10px] uppercase font-bold tracking-widest text-[#a855f7] font-mono border-b border-rose-50/80 pb-2">
-                Simulated Settlement Receipt
+                Order Summary
               </div>
               <div className="space-y-1.5 text-xs text-slate-700 font-sans">
                 <div className="flex justify-between">
@@ -933,22 +933,22 @@ export default function CartDrawer({
           <div className="flex-1 overflow-y-auto p-5 space-y-5 transition-all text-center flex flex-col justify-center bg-[#FCF9F9]">
             <div className="space-y-2 mt-2">
               <span className="text-[10px] uppercase font-bold tracking-widest text-rose-600 font-mono bg-rose-50 border border-rose-100 px-3 py-1 rounded-full inline-block">
-                🔒 SSE Encrypted Gateway Tunnel
+                Secure Payment
               </span>
               <h3 className="text-base font-serif italic pt-1 text-slate-900 font-extrabold">
-                Secure Gateway Checkout Portal
+                Complete Your Payment
               </h3>
               <p className="text-[11px] text-slate-650 max-w-xs mx-auto leading-relaxed">
-                You are being securely channeled to complete your gifting settlement of <strong>{selectedCurrency.symbol} {grandTotalConverted.toLocaleString(undefined, { maximumFractionDigits: 1 })}</strong> ({selectedCurrency.code}).
+                You are about to complete payment of <strong>{selectedCurrency.symbol} {grandTotalConverted.toLocaleString(undefined, { maximumFractionDigits: 1 })}</strong> ({selectedCurrency.code}).
               </p>
             </div>
 
             {isVerifyingPaymentFlow ? (
-              /* PROGRESSIVE DIGITAL HANDSHAKE CONSOLE LOG OVERLAY */
+              /* Payment progress overlay */
               <div className="p-5 rounded-2xl border border-rose-200 text-left space-y-4 max-w-sm mx-auto w-full font-mono bg-slate-900 text-[#10b981] shadow-xl">
                 <div className="flex items-center gap-2 pb-2 border-b border-slate-700">
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping shrink-0" />
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">Live Secure Gateway Handshake</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">Processing Secure Payment</span>
                 </div>
                 
                 <div className="text-center py-3 space-y-2">
@@ -963,7 +963,7 @@ export default function CartDrawer({
                 </div>
               </div>
             ) : (
-              /* ACTIVE FORM INPUT SIMULATORS per selected gateway */
+              /* Active payment form for selected gateway */
               <div className="p-5 rounded-2xl border border-rose-200 bg-white shadow-md max-w-md mx-auto w-full text-left space-y-4">
                 <div className="flex items-center gap-2 justify-between border-b border-rose-50 pb-2">
                   <span className="text-[10.5px] font-sans font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
@@ -1031,14 +1031,14 @@ export default function CartDrawer({
                     }}
                     className="flex-1 py-3 bg-[#e2e8f0] text-slate-700 hover:bg-[#cbd5e1] font-bold text-xs uppercase tracking-wide rounded-xl transition cursor-pointer border-0"
                   >
-                    Cancel Tunnel
+                    Cancel Payment
                   </button>
                   <button
                     type="button"
                     onClick={handleSimulatePaymentCompletion}
                     className="flex-1 py-3 bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-700 hover:to-rose-800 text-white font-extrabold text-xs uppercase tracking-widest rounded-xl transition cursor-pointer shadow-md shadow-rose-500/15 border-0"
                   >
-                    Authorize Payment
+                    Complete Payment
                   </button>
                 </div>
               </div>
@@ -1075,6 +1075,8 @@ export default function CartDrawer({
                     ? item.selectedPrice 
                     : (prod.discountPrice && prod.discountPrice > 0 && prod.discountPrice < prod.price ? prod.discountPrice : prod.price);
                   const convertedProdPrice = itemUnitPrice * rate;
+                  const availableStock = getProductStock(prod, state.products);
+                  const canIncreaseQuantity = prod.allowOrderWhenOutOfStock || item.quantity < availableStock;
 
                   return (
                     <div key={item.productId + '-cart-' + itemIdx} className="checkout-item-row p-3.5 flex gap-3 items-center">
@@ -1120,12 +1122,13 @@ export default function CartDrawer({
                           <span className="px-2 py-1 font-mono font-black text-xs text-slate-800 flex items-center justify-center bg-rose-50/10 min-w-[20px]">{item.quantity}</span>
                           <button
                             type="button"
+                            disabled={!canIncreaseQuantity}
                             onClick={() => {
                               const copy = [...cartItems];
                               copy[itemIdx].quantity++;
                               onUpdateCartItems(copy);
                             }}
-                            className="px-2 py-1 text-slate-655 hover:bg-rose-50/50 rounded-r-lg transition font-bold text-xs cursor-pointer border-0 bg-transparent flex items-center justify-center"
+                            className="px-2 py-1 text-slate-655 hover:bg-rose-50/50 rounded-r-lg transition font-bold text-xs cursor-pointer border-0 bg-transparent flex items-center justify-center disabled:opacity-35 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                           >
                             <Plus className="w-2.5 h-2.5" />
                           </button>
@@ -1142,6 +1145,11 @@ export default function CartDrawer({
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
+                      {!canIncreaseQuantity && !prod.allowOrderWhenOutOfStock && (
+                        <span className="text-[9px] text-amber-600 font-semibold font-mono">
+                          Only {availableStock} left
+                        </span>
+                      )}
                     </div>
                   );
                 })}

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Product, DatabaseState, CurrencySettings, Review, ProductStatus } from '../../types';
-import { X, Star, Sparkles, Send, ShoppingBasket, Upload, Trash2 } from 'lucide-react';
+import { ArrowLeft, Star, Sparkles, Send, ShoppingBasket, Upload, Trash2 } from 'lucide-react';
 import { getProductStock, isProductOutOfStock, isProductOutOfStockForCustomer, isProductLowStockForCustomer } from '../../utils/stockUtils';
 
 const fallbackProductImage = 'https://images.unsplash.com/photo-154946?q=80&w=600&auto=format&fit=crop';
@@ -23,6 +23,7 @@ interface ProductDetailModalProps {
     customImageUrl?: string,
     selectedVariations?: { name: string; value: string; priceAdjustment: number }[]
   ) => void;
+  onNavigateProduct?: (productId: string) => void;
 }
 
 export default function ProductDetailModal({
@@ -31,7 +32,8 @@ export default function ProductDetailModal({
   onUpdateState,
   selectedCurrency,
   onClose,
-  onAddToCart
+  onAddToCart,
+  onNavigateProduct
 }: ProductDetailModalProps) {
   
   const [activeProductId, setActiveProductId] = useState(productId);
@@ -40,8 +42,47 @@ export default function ProductDetailModal({
     setActiveProductId(productId);
   }, [productId]);
 
-  const product = state.products.find(p => p.id === activeProductId);
-  if (!product) return null;
+  const normalizeProductRouteKey = (value?: string) =>
+    (value || '')
+      .trim()
+      .toLowerCase()
+      .replace(/&/g, 'and')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+
+  const activeProductKey = normalizeProductRouteKey(activeProductId);
+  const matchingProducts = state.products.filter((p) => {
+    const productKeys = [p.id, p.slug, p.name, p.metaTitle].map(normalizeProductRouteKey);
+    return p.id === activeProductId || p.slug === activeProductId || productKeys.includes(activeProductKey);
+  });
+  const product = matchingProducts.find(p => p.status === ProductStatus.ACTIVE);
+  if (!product) {
+    return (
+      <div className="w-full bg-[#FCF9F9] font-sans page-enter-smooth">
+        <div className="max-w-3xl mx-auto px-4 py-16 text-center space-y-5">
+          <div className="w-14 h-14 rounded-full bg-rose-50 border border-rose-100 flex items-center justify-center mx-auto text-rose-500">
+            <ShoppingBasket className="w-7 h-7" />
+          </div>
+          <div className="space-y-2">
+            <h1 className="text-2xl sm:text-3xl font-serif italic font-extrabold text-slate-900">
+              Product not available
+            </h1>
+            <p className="text-sm text-slate-600 leading-relaxed max-w-xl mx-auto">
+              This product link may have changed or the item is currently unavailable. Browse the catalog to find active gifts.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black uppercase tracking-widest transition cursor-pointer"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back to Catalog
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const isOutOfStock = isProductOutOfStockForCustomer(product, state.products);
   const actualStock = getProductStock(product, state.products);
@@ -51,7 +92,7 @@ export default function ProductDetailModal({
   const subProductsInCombo = product.isHamper && product.hamperItems && state.products
     ? product.hamperItems
         .map(item => state.products.find(p => p.id === item.productId))
-        .filter((p): p is Product => !!p && p.status !== 'deleted')
+        .filter((p): p is Product => !!p && p.status === ProductStatus.ACTIVE)
     : [];
 
   const resolvedImages = React.useMemo(() => {
@@ -193,7 +234,7 @@ export default function ProductDetailModal({
   // Get automatic 4 recommended "You May Also Like" products in real-time based on categories and price
   const recommendedProducts = React.useMemo(() => {
     if (!product) return [];
-    const others = state.products.filter(p => p.id !== product.id && p.status !== ProductStatus.DELETED);
+    const others = state.products.filter(p => p.id !== product.id && p.status === ProductStatus.ACTIVE);
     
     const nameLower = (product.name || '').toLowerCase();
     const isCake = nameLower.includes('cake') || product.categoryId.includes('cake');
@@ -248,38 +289,36 @@ export default function ProductDetailModal({
   }, [product, state.products]);
 
   return (
-    <div className="fixed inset-0 z-50 bg-[#020202]/75 backdrop-blur-sm flex items-center justify-center p-0 md:p-4 overflow-y-auto">
-      {/* Background click to dismiss */}
-      <div className="absolute inset-0" onClick={onClose}></div>
-
+    <div className="w-full bg-[#FCF9F9] font-sans page-enter-smooth">
       {/* Structured Top-Down product page */}
       <div 
-        role="dialog" 
-        className={`relative w-full h-screen md:h-[95vh] md:max-h-[95vh] max-w-xl md:max-w-7xl rounded-none md:rounded-2xl overflow-hidden shadow-2xl flex flex-col z-10 animate-fade-in font-sans transition-colors ${
-          isLight ? 'bg-[#FCF9F9] border-0 md:border border-rose-100 text-slate-800' : 'bg-[#0d0d0d] border-0 md:border border-white/10 text-slate-350'
+        role="article" 
+        className={`relative w-full min-h-screen overflow-hidden flex flex-col z-10 animate-fade-in font-sans transition-colors ${
+          isLight ? 'bg-[#FCF9F9] text-slate-800' : 'bg-[#0d0d0d] text-slate-350'
         }`}
       >
         
-        {/* Absolute header sticky Close Button */}
+        {/* Page navigation header */}
         <div className={`p-4 border-b flex items-center justify-between sticky top-0 z-20 shrink-0 ${
           isLight ? 'bg-[#FCF9F9]/95 border-rose-100/60' : 'bg-[#0d0d0d]/95 border-white/10'
         } backdrop-blur-md`}>
           <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-amber-500">
-            🛒 Product Detail
+            Product Detail
           </span>
           <button 
             type="button"
             onClick={onClose}
-            className={`p-1.5 hover:bg-amber-500 hover:text-slate-950 rounded-full border transition cursor-pointer ${
+            className={`inline-flex items-center gap-2 px-3 py-2 hover:bg-amber-500 hover:text-slate-950 rounded-full border transition cursor-pointer text-[10px] font-black uppercase tracking-wider ${
               isLight ? 'bg-white text-slate-600 border-slate-200' : 'bg-[#050505]/80 text-white border-white/10'
             }`}
           >
-            <X className="w-4 h-4" />
+            <ArrowLeft className="w-4 h-4" />
+            <span className="hidden sm:inline">Back to Catalog</span>
           </button>
         </div>
 
         {/* Unified vertical scrollable flow matching the Koseli Xpress PDP schema */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 space-y-6">
+        <div className="w-full max-w-7xl mx-auto p-4 sm:p-6 md:p-8 space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-12 gap-6 md:gap-10 items-start">
             
             {/* Left Column: Image Gallery Visuals */}
@@ -1119,7 +1158,13 @@ export default function ProductDetailModal({
                       }`}
                     >
                       <div 
-                        onClick={() => setActiveProductId(rec.id)} 
+                        onClick={() => {
+                          if (onNavigateProduct) {
+                            onNavigateProduct(rec.id);
+                          } else {
+                            setActiveProductId(rec.id);
+                          }
+                        }} 
                         className="flex gap-2.5 items-center cursor-pointer flex-1 min-w-0"
                         title="Click to view full customizable options"
                       >

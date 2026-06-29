@@ -16,12 +16,30 @@ html {
   scroll-behavior: smooth;
 }
 
+* {
+  scroll-behavior: smooth;
+}
+
 body {
   background-color: var(--theme-bg-deep, #FFFBFC);
   color: #334155;
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+a,
+button,
+input,
+select,
+textarea,
+.premium-card,
+.checkout-section-card,
+.checkout-item-row,
+.checkout-settlement-card {
+  transition-property: color, background-color, border-color, box-shadow, transform, opacity;
+  transition-duration: 180ms;
+  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .font-display {
@@ -73,6 +91,37 @@ body {
 
 .animate-fade-up {
   animation: fade-up 0.7s ease-out forwards;
+}
+
+@keyframes page-enter-smooth {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.995);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.page-enter-smooth {
+  animation: page-enter-smooth 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.smooth-scroll-area {
+  scroll-behavior: smooth;
+  overscroll-behavior: contain;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* Gift-themed lounge backdrop — boxes, bows, sparkles */

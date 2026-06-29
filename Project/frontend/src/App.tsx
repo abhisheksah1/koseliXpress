@@ -69,6 +69,31 @@ export default function App() {
     setCustomerProductPage(1);
   }, [selectedCategoryFilter, selectedBrandFilter, catalogSearch, catalogSort]);
 
+  const normalizeProductRouteKey = (value?: string) =>
+    (value || '')
+      .trim()
+      .toLowerCase()
+      .replace(/&/g, 'and')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+
+  const findProductForRoute = (productIdOrSlug?: string) => {
+    if (!dbState || !productIdOrSlug) return undefined;
+    const routeKey = normalizeProductRouteKey(decodeURIComponent(productIdOrSlug));
+    const matches = dbState.products.filter((product) => {
+      const productKeys = [
+        product.id,
+        product.slug,
+        product.name,
+        product.metaTitle
+      ].map(normalizeProductRouteKey);
+
+      return product.id === productIdOrSlug || product.slug === productIdOrSlug || productKeys.includes(routeKey);
+    });
+
+    return matches.find(product => product.status === ProductStatus.ACTIVE);
+  };
+
   const applyCustomerRouteFromPath = () => {
     if (isAdminRoute()) return;
 
@@ -89,12 +114,25 @@ export default function App() {
       const categorySlug = decodeURIComponent(path.replace('category/', ''));
       setSelectedCategoryFilter(categorySlug);
       setSelectedBrandFilter('');
+      setSelectedProductIdDetails(null);
       setCurrentSlug('catalog');
+      return;
+    }
+
+    if (path.startsWith('product/')) {
+      const productSlugOrId = decodeURIComponent(path.replace('product/', ''));
+      const product = findProductForRoute(productSlugOrId);
+      setSelectedCategoryFilter('');
+      setSelectedBrandFilter('');
+      setCatalogSearch('');
+      setCurrentSlug('product');
+      setSelectedProductIdDetails(product?.id || productSlugOrId);
       return;
     }
 
     if (path === 'catalog' || path === 'products') {
       setCurrentSlug('catalog');
+      setSelectedProductIdDetails(null);
       return;
     }
 
@@ -114,6 +152,14 @@ export default function App() {
     window.addEventListener('popstate', onRouteChange);
     return () => window.removeEventListener('popstate', onRouteChange);
   }, []);
+
+  useEffect(() => {
+    if (!dbState || isAdminApp) return;
+    const path = window.location.pathname.replace(/^\/+|\/+$/g, '');
+    if (path.startsWith('product/')) {
+      applyCustomerRouteFromPath();
+    }
+  }, [dbState, isAdminApp]);
 
   // Toast notification states
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -476,7 +522,7 @@ export default function App() {
       let slug = currentSlug;
 
       if (selectedProductIdDetails) {
-        const prod = prev.products?.find(p => p.id === selectedProductIdDetails);
+        const prod = findProductForRoute(selectedProductIdDetails);
         if (prod) {
           pageTitle = `Product: ${prod.name}`;
           slug = `product/${prod.id}`;
@@ -596,7 +642,7 @@ export default function App() {
 
     if (selectedProductIdDetails) {
       // PRODUCT DETAIL VIEW ACTIVE
-      const p = dbState.products.find(prod => prod.id === selectedProductIdDetails);
+      const p = findProductForRoute(selectedProductIdDetails);
       if (p) {
         const pName = p.name;
         const pPrice = p.discountPrice && p.discountPrice > 0 ? p.discountPrice : p.price;
@@ -847,8 +893,6 @@ export default function App() {
       return;
     }
 
-    const copy = [...cartItems];
-    
     // Calculate total price adjustment from selected variations
     const netPriceAdjustment = selectedVariations
       ? selectedVariations.reduce((sum, vOpt) => sum + vOpt.priceAdjustment, 0)
@@ -865,28 +909,52 @@ export default function App() {
 
     const activePrice = basePrice + netPriceAdjustment;
 
-    const idx = copy.findIndex(item => 
-      item.productId === product.id && 
-      item.customMessage === customMessage && 
-      item.customImageUrl === customImageUrl &&
-      (item.selectedPrice === undefined || item.selectedPrice === activePrice) &&
-      (item.selectedVariations || []).length === (selectedVariations || []).length &&
-      (item.selectedVariations || []).every((o, i) => selectedVariations && selectedVariations[i] && o.name === selectedVariations[i].name && o.value === selectedVariations[i].value)
-    );
-    if (idx >= 0) {
-      copy[idx].quantity++;
-    } else {
-      copy.push({
-        productId: product.id,
-        quantity: 1,
-        selectedPrice: activePrice,
-        customMessage,
-        customImageUrl,
-        selectedVariations
-      });
-    }
-    setCartItems(copy);
+    setCartItems(prevItems => {
+      const copy = [...prevItems];
+      const idx = copy.findIndex(item => 
+        item.productId === product.id && 
+        item.customMessage === customMessage && 
+        item.customImageUrl === customImageUrl &&
+        (item.selectedPrice === undefined || item.selectedPrice === activePrice) &&
+        (item.selectedVariations || []).length === (selectedVariations || []).length &&
+        (item.selectedVariations || []).every((o, i) => selectedVariations && selectedVariations[i] && o.name === selectedVariations[i].name && o.value === selectedVariations[i].value)
+      );
+      if (idx >= 0) {
+        copy[idx] = { ...copy[idx], quantity: copy[idx].quantity + 1 };
+      } else {
+        copy.push({
+          productId: product.id,
+          quantity: 1,
+          selectedPrice: activePrice,
+          customMessage,
+          customImageUrl,
+          selectedVariations
+        });
+      }
+      return copy;
+    });
     setIsCartOpen(true);
+  };
+
+  const getProductPath = (product: Product) => `/product/${encodeURIComponent(product.slug || product.id)}`;
+
+  const navigateToProductDetails = (productId: string) => {
+    const product = findProductForRoute(productId);
+    setSelectedCategoryFilter('');
+    setSelectedBrandFilter('');
+    setCatalogSearch('');
+    setCurrentSlug('product');
+    setSelectedProductIdDetails(product?.id || productId);
+    setCustomerProductPage(1);
+
+    if (product) {
+      const nextPath = getProductPath(product);
+      if (window.location.pathname !== nextPath) {
+        window.history.pushState({}, '', nextPath);
+      }
+    }
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const navigateToSlug = (slug: string) => {
@@ -968,7 +1036,7 @@ export default function App() {
 
   // Product listing matching filtration rules
   const catalogProductsBeforeSort = dbState.products.filter(p => {
-    if (p.status === ProductStatus.DELETED) return false;
+    if (p.status !== ProductStatus.ACTIVE) return false;
     const matchesCategory = selectedCategoryFilter 
       ? productMatchesSelectedCategory(p, selectedCategoryFilter)
       : true;
@@ -1486,12 +1554,24 @@ export default function App() {
           ) : (
             /* Primary View Area layout */
             <main className={`flex-grow w-full ${
-              currentSlug === 'home' && activePageConfig && !isCatalogView
+              selectedProductIdDetails
+                ? 'max-w-none px-0 py-0'
+                : currentSlug === 'home' && activePageConfig && !isCatalogView
                 ? 'max-w-none px-0 py-0'
                 : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8'
             }`}>
               
-              {currentSlug === 'blog' || currentSlug.startsWith('blog/') || currentSlug.startsWith('blog-') ? (
+              {selectedProductIdDetails ? (
+                <ProductDetailModal
+                  productId={selectedProductIdDetails}
+                  state={dbState}
+                  onUpdateState={handleUpdateDatabaseState}
+                  selectedCurrency={selectedCurrency}
+                    onClose={() => navigateToSlug('catalog')}
+                    onNavigateProduct={navigateToProductDetails}
+                  onAddToCart={(p, msg, img, vars) => handleAddToCart(p, undefined, msg, img, vars)}
+                />
+              ) : currentSlug === 'blog' || currentSlug.startsWith('blog/') || currentSlug.startsWith('blog-') ? (
                 <BlogViewer 
                   currentSlug={currentSlug}
                   state={dbState}
@@ -1512,7 +1592,7 @@ export default function App() {
                   sections={activePageConfig.sections}
                   state={dbState}
                   selectedCurrency={selectedCurrency}
-                  onViewProductDetails={setSelectedProductIdDetails}
+                    onViewProductDetails={navigateToProductDetails}
                   onAddToCart={(p, e) => handleAddToCart(p, e)}
                   onNavigateToCategory={(catId) => {
                     navigateToCategory(catId);
@@ -1654,7 +1734,7 @@ export default function App() {
                               product={prod}
                               selectedCurrency={selectedCurrency}
                               deliveryGroups={dbState.deliveryGroups}
-                              onViewDetails={setSelectedProductIdDetails}
+                              onViewDetails={navigateToProductDetails}
                               onAddToCart={(p, e) => handleAddToCart(p, e)}
                               allProducts={dbState.products}
                             />
@@ -1728,58 +1808,6 @@ export default function App() {
           {/* DYNAMIC CATEGORY QUICK NAVIGATION BAR ABOVE FOOTER */}
           <div className="border-t border-rose-100/50 bg-[#FFFDFD]/85 py-7 mb-0 shrink-0">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-6">
-              {isCatalogView && (
-                <div id="customer-catalog-products" className="space-y-6 pb-8 border-b border-rose-100/60">
-                  <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 text-left">
-                    <div>
-                      <h2 className="text-2xl sm:text-3xl font-serif italic font-extrabold text-slate-900">
-                        {selectedCategory?.name || 'All Products'}
-                      </h2>
-                      <p className="text-xs font-mono uppercase tracking-widest text-rose-600 mt-1">
-                        {catalogProducts.length} product{catalogProducts.length === 1 ? '' : 's'} found
-                      </p>
-                    </div>
-                    {(selectedCategoryFilter || selectedBrandFilter || catalogSearch) && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedCategoryFilter('');
-                          setSelectedBrandFilter('');
-                          setCatalogSearch('');
-                          navigateToSlug('catalog');
-                        }}
-                        className="self-start sm:self-auto px-4 py-2 text-xs font-bold rounded-xl bg-rose-50 border border-rose-100 text-rose-700 hover:bg-rose-100 transition"
-                      >
-                        View All Products
-                      </button>
-                    )}
-                  </div>
-
-                  {catalogProducts.length > 0 ? (
-                    <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5 text-left">
-                      {paginatedCustomerProducts.map((prod, idx) => (
-                        <ProductCard
-                          key={`visible-catalog-prod-${prod.id || idx}-${idx}`}
-                          product={prod}
-                          selectedCurrency={selectedCurrency}
-                          deliveryGroups={dbState.deliveryGroups}
-                          onViewDetails={setSelectedProductIdDetails}
-                          onAddToCart={(p, e) => handleAddToCart(p, e)}
-                          allProducts={dbState.products}
-                        />
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="rounded-2xl border border-rose-100 bg-white p-10 text-center">
-                      <h3 className="font-serif italic text-lg font-bold text-slate-900">No products found</h3>
-                      <p className="text-xs text-slate-500 mt-1">
-                        No visible products match this category yet.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
-
               {/* Browse Categories */}
               <div className="space-y-4">
                 <div className="flex items-center justify-center gap-2">
@@ -1891,18 +1919,6 @@ export default function App() {
               setCartClickCount(prev => prev + 1);
             }}
           />
-
-          {/* CUSTOMER DETAIL DIALOG MODAL */}
-          {selectedProductIdDetails && (
-            <ProductDetailModal
-              productId={selectedProductIdDetails}
-              state={dbState}
-              onUpdateState={handleUpdateDatabaseState}
-              selectedCurrency={selectedCurrency}
-              onClose={() => setSelectedProductIdDetails(null)}
-              onAddToCart={(p, msg, img, vars) => handleAddToCart(p, undefined, msg, img, vars)}
-            />
-          )}
 
           {/* CART DRAWER CHECKOUT SLIDE-OVER */}
           <CartDrawer

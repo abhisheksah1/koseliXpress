@@ -31,7 +31,7 @@ export default function PageRenderer({
   const isLight = state.appearance?.themeMode !== 'dark';
   const primary = state.appearance?.primaryColor || '#E91E63';
   const secondary = state.appearance?.secondaryColor || '#C2185B';
-  const isCustomerVisibleProduct = (product: Product) => product.status !== ProductStatus.DELETED;
+  const isCustomerVisibleProduct = (product: Product) => product.status === ProductStatus.ACTIVE;
   const normalizeCategoryKey = (value?: string) => (value || '').trim().toLowerCase();
   const getCategoryMatchKeys = (categoryIdOrSlug: string) => {
     const root = state.categories.find((cat) =>
