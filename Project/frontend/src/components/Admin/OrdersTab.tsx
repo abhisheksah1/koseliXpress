@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { DatabaseState, Order, OrderStatus, Lead, LeadStatus, Product } from '../../types';
 import { sendOrderStatusEmail } from '../../utils/emailHelper';
 import { getWhatsAppNotificationUrl } from '../../utils/whatsappHelper';
@@ -12,18 +12,34 @@ import {
   AlertCircle, 
   ChevronUp, 
   ChevronDown, 
-  ArrowUpDown, 
-  Eye, 
-  Edit, 
   Clock, 
   DollarSign, 
   User, 
   MapPin, 
-  Info, 
-  ChevronRight,
   ClipboardList,
-  Download
+  Download,
+  ShoppingCart,
+  Package,
+  Bell,
+  Users,
+  Sparkles,
 } from 'lucide-react';
+import {
+  AdminGhostButton,
+  AdminPrimaryButton,
+  AdminCatalogStyles,
+} from './AdminFormControls';
+import {
+  ORDER_STATUS_LABELS,
+  ORDER_STATUS_BADGE,
+  PAYMENT_STATUS_BADGE,
+  PREMIUM_INPUT,
+  PREMIUM_SELECT,
+  TABLE_HEAD,
+  TABLE_WRAPPER,
+} from './orderFulfillmentConfig';
+import OrderFulfillmentCard from './OrderFulfillmentCard';
+import FulfillmentPagination from './FulfillmentPagination';
 
 interface OrdersTabProps {
   state: DatabaseState;
@@ -434,507 +450,365 @@ export default function OrdersTab({ state, onUpdateState }: OrdersTabProps) {
 
   // Pagination states
   const [adminOrdersPage, setAdminOrdersPage] = useState(1);
-  const itemsPerPage = 50;
+  const [ordersPageSize, setOrdersPageSize] = useState(10);
+  const [adminLeadsPage, setAdminLeadsPage] = useState(1);
+  const [leadsPageSize, setLeadsPageSize] = useState(10);
+  const [adminRemindersPage, setAdminRemindersPage] = useState(1);
+  const [remindersPageSize, setRemindersPageSize] = useState(10);
 
   React.useEffect(() => {
     setAdminOrdersPage(1);
-  }, [searchQuery, statusFilter, paymentFilter, startDate, endDate, orderTypeFilter, sortField, sortOrder]);
+  }, [searchQuery, statusFilter, paymentFilter, startDate, endDate, orderTypeFilter, sortField, sortOrder, ordersPageSize]);
 
-  const totalAdminOrdersPages = Math.ceil(sortedOrders.length / itemsPerPage);
+  React.useEffect(() => {
+    setAdminLeadsPage(1);
+  }, [leadsPageSize]);
+
+  React.useEffect(() => {
+    setAdminRemindersPage(1);
+  }, [remindersPageSize]);
+
+  React.useEffect(() => {
+    setAdminRemindersPage(1);
+  }, [remindersPageSize]);
+
+  const totalAdminOrdersPages = Math.ceil(sortedOrders.length / ordersPageSize) || 1;
   const paginatedAdminOrders = sortedOrders.slice(
-    (adminOrdersPage - 1) * itemsPerPage,
-    adminOrdersPage * itemsPerPage
+    (adminOrdersPage - 1) * ordersPageSize,
+    adminOrdersPage * ordersPageSize
   );
 
-  const [adminLeadsPage, setAdminLeadsPage] = useState(1);
-  const totalAdminLeadsPages = Math.ceil(state.leads.length / itemsPerPage);
+  const remindersList = state.specialDayReminders || [];
+  const totalAdminLeadsPages = Math.ceil(state.leads.length / leadsPageSize) || 1;
   const paginatedAdminLeads = state.leads.slice(
-    (adminLeadsPage - 1) * itemsPerPage,
-    adminLeadsPage * itemsPerPage
+    (adminLeadsPage - 1) * leadsPageSize,
+    adminLeadsPage * leadsPageSize
   );
+  const totalAdminRemindersPages = Math.ceil(remindersList.length / remindersPageSize) || 1;
+  const paginatedReminders = remindersList.slice(
+    (adminRemindersPage - 1) * remindersPageSize,
+    adminRemindersPage * remindersPageSize
+  );
+
+  React.useEffect(() => {
+    if (adminOrdersPage > totalAdminOrdersPages) setAdminOrdersPage(Math.max(1, totalAdminOrdersPages));
+  }, [adminOrdersPage, totalAdminOrdersPages]);
+
+  React.useEffect(() => {
+    if (adminLeadsPage > totalAdminLeadsPages) setAdminLeadsPage(Math.max(1, totalAdminLeadsPages));
+  }, [adminLeadsPage, totalAdminLeadsPages]);
+
+  React.useEffect(() => {
+    if (adminRemindersPage > totalAdminRemindersPages) setAdminRemindersPage(Math.max(1, totalAdminRemindersPages));
+  }, [adminRemindersPage, totalAdminRemindersPages]);
+
+  const orderMetrics = useMemo(() => {
+    const orders = state.orders;
+    const activeOrders = orders.filter((o) => o.status !== OrderStatus.CANCELLED);
+    return {
+      total: orders.length,
+      actionRequired: orders.filter(
+        (o) => o.status === OrderStatus.PAID || o.status === OrderStatus.PREPARING
+      ).length,
+      inTransit: orders.filter((o) => o.status === OrderStatus.SHIPPED).length,
+      delivered: orders.filter((o) => o.status === OrderStatus.DELIVERED).length,
+      revenueNpr: activeOrders.reduce((sum, o) => sum + (o.totalAmountBase || 0), 0),
+      failedLeads: state.leads.filter((l) => l.status === LeadStatus.FAILED).length,
+      reminders: (state.specialDayReminders || []).length,
+    };
+  }, [state.orders, state.leads, state.specialDayReminders]);
+
+  const hasActiveFilters =
+    Boolean(startDate || endDate || searchQuery) ||
+    statusFilter !== 'all' ||
+    paymentFilter !== 'all' ||
+    orderTypeFilter !== 'all';
+
+  const clearAllFilters = () => {
+    setStartDate('');
+    setEndDate('');
+    setSearchQuery('');
+    setStatusFilter('all');
+    setPaymentFilter('all');
+    setOrderTypeFilter('all');
+  };
 
   return (
-    <div className="space-y-6">
-      {/* Sub tabs switches */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h2 className="text-2xl font-semibold text-slate-850">Operational Fulfillment</h2>
-          <p className="text-sm text-slate-500">Monitor consumer sales, fulfill gift hamper dispatch pipelines, and follow up on customer leads.</p>
+    <div className="space-y-5">
+      <AdminCatalogStyles />
+      <style>{`
+        .pagination-btn {
+          padding: 0.375rem 0.75rem;
+          background: white;
+          border: 1px solid rgb(252 231 243 / 0.8);
+          border-radius: 0.75rem;
+          color: rgb(71 85 105);
+          font-size: 0.75rem;
+          font-weight: 600;
+          transition: all 0.15s;
+          cursor: pointer;
+        }
+        .pagination-btn:hover:not(:disabled) {
+          background: rgb(253 242 248 / 0.6);
+          border-color: rgb(233 30 99 / 0.3);
+          color: rgb(233 30 99);
+        }
+        .pagination-btn:disabled {
+          opacity: 0.4;
+          cursor: not-allowed;
+        }
+        .fulfillment-table tbody tr:hover {
+          background: linear-gradient(90deg, rgb(253 242 248 / 0.35) 0%, rgb(255 255 255) 100%);
+        }
+      `}</style>
+
+      {/* Header toolbar */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-5 bg-white border border-pink-100/80 rounded-2xl shadow-sm">
+        <div className="flex items-start gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#E91E63] to-[#C2185B] text-white flex items-center justify-center shrink-0 shadow-md shadow-pink-900/20">
+            <ShoppingCart className="w-5 h-5" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#E91E63]">Operations Hub</p>
+            <p className="text-sm text-slate-500 mt-0.5">Track orders, recover abandoned carts, and manage customer reminders.</p>
+          </div>
         </div>
 
-        <div className="flex bg-slate-100 p-1 rounded-lg">
+        <div className="flex gap-1.5 p-1 bg-slate-100 rounded-xl shrink-0 flex-wrap">
           <button
+            type="button"
             onClick={() => setActiveSegment('orders')}
-            className={`px-3.5 py-1.5 text-xs font-semibold rounded-md transition cursor-pointer ${activeSegment === 'orders' ? 'bg-white text-slate-800 shadow-xs' : 'text-slate-500'}`}
+            className={`px-4 py-2 text-xs font-bold rounded-lg transition ${
+              activeSegment === 'orders' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+            }`}
           >
-            Fulfillment Orders ({state.orders.length})
+            <Package className="w-3.5 h-3.5 inline mr-1.5 -mt-0.5" />
+            Orders ({orderMetrics.total})
           </button>
           <button
+            type="button"
             onClick={() => setActiveSegment('leads')}
-            className={`px-3.5 py-1.5 text-xs font-semibold rounded-md transition cursor-pointer ${activeSegment === 'leads' ? 'bg-white text-slate-800 shadow-xs' : 'text-slate-500'}`}
+            className={`px-4 py-2 text-xs font-bold rounded-lg transition ${
+              activeSegment === 'leads' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+            }`}
           >
-            Follow-up Leads ({state.leads.filter(l => l.status === LeadStatus.FAILED).length})
+            <Users className="w-3.5 h-3.5 inline mr-1.5 -mt-0.5" />
+            Leads ({orderMetrics.failedLeads})
           </button>
           <button
+            type="button"
             onClick={() => setActiveSegment('reminders')}
-            className={`px-3.5 py-1.5 text-xs font-semibold rounded-md transition cursor-pointer ${activeSegment === 'reminders' ? 'bg-white text-slate-800 shadow-xs' : 'text-slate-500'}`}
+            className={`px-4 py-2 text-xs font-bold rounded-lg transition ${
+              activeSegment === 'reminders' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+            }`}
           >
-            📅 Customer Reminders ({(state.specialDayReminders || []).length})
+            <Bell className="w-3.5 h-3.5 inline mr-1.5 -mt-0.5" />
+            Reminders ({orderMetrics.reminders})
           </button>
         </div>
       </div>
 
+      {/* KPI strip */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        {[
+          { label: 'Action Required', value: orderMetrics.actionRequired, icon: Clock, accent: 'amber' },
+          { label: 'In Transit', value: orderMetrics.inTransit, icon: Truck, accent: 'indigo' },
+          { label: 'Delivered', value: orderMetrics.delivered, icon: CheckCircle2, accent: 'emerald' },
+          { label: 'Revenue (NPR)', value: orderMetrics.revenueNpr.toLocaleString(), icon: DollarSign, accent: 'rose', mono: true },
+          { label: 'Filtered Results', value: sortedOrders.length, icon: Sparkles, accent: 'violet' },
+        ].map((stat) => {
+          const Icon = stat.icon;
+          const accentMap: Record<string, string> = {
+            amber: 'from-amber-50 to-orange-50/50 border-amber-100/80 text-amber-700',
+            indigo: 'from-indigo-50 to-violet-50/50 border-indigo-100/80 text-indigo-700',
+            emerald: 'from-emerald-50 to-teal-50/50 border-emerald-100/80 text-emerald-700',
+            rose: 'from-rose-50 to-pink-50/50 border-pink-100/80 text-[#E91E63]',
+            violet: 'from-violet-50 to-purple-50/50 border-violet-100/80 text-violet-700',
+          };
+          return (
+            <div
+              key={stat.label}
+              className={`p-4 rounded-2xl border bg-gradient-to-br shadow-sm ${accentMap[stat.accent]}`}
+            >
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{stat.label}</span>
+                <Icon className={`w-4 h-4 opacity-70 ${stat.accent === 'rose' ? 'text-[#E91E63]' : ''}`} />
+              </div>
+              <p className={`text-xl font-bold text-slate-900 ${stat.mono ? 'font-mono text-base sm:text-lg' : ''}`}>
+                {stat.value}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+
       {activeSegment === 'orders' ? (
         <div className="space-y-4">
-          {/* Query Filter Toolbar */}
-          <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-5 gap-3 p-4 bg-white border border-slate-100 rounded-xl shadow-xs">
-            {/* Search Input */}
-            <div className="relative">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-              <input
-                type="text"
-                placeholder="Search Client, phone, or ID..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 pr-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg w-full focus:outline-none focus:ring-1 focus:ring-amber-500"
-              />
+          {/* Filters */}
+          <div className="p-5 bg-white border border-pink-100/80 rounded-2xl shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-bold text-slate-800">Filter & Search</p>
+                <p className="text-[11px] text-slate-500">Narrow orders by status, payment, type, or date range.</p>
+              </div>
+              {hasActiveFilters && (
+                <AdminGhostButton onClick={clearAllFilters} className="!py-2 shrink-0">
+                  Clear filters
+                </AdminGhostButton>
+              )}
             </div>
 
-            {/* Fulfillment Status Filter */}
-            <div>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg w-full focus:outline-none text-slate-650 cursor-pointer"
-              >
-                <option value="all">All Order Statuses</option>
-                <option value={OrderStatus.PENDING}>Payment Pending</option>
-                <option value={OrderStatus.PAID}>Order Received</option>
-                <option value={OrderStatus.PREPARING}>Preparing</option>
-                <option value={OrderStatus.SHIPPED}>Dispatch</option>
-                <option value={OrderStatus.DELIVERED}>Delivered</option>
-                <option value={OrderStatus.CANCELLED}>Cancelled</option>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
+              <div className="relative xl:col-span-1">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Search client, phone, or ID…"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className={`${PREMIUM_INPUT} pl-10`}
+                />
+              </div>
+
+              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={PREMIUM_SELECT}>
+                <option value="all">All fulfillment statuses</option>
+                {Object.values(OrderStatus).map((status) => (
+                  <option key={status} value={status}>{ORDER_STATUS_LABELS[status]}</option>
+                ))}
               </select>
-            </div>
 
-            {/* Payment Status Filter */}
-            <div>
-              <select
-                value={paymentFilter}
-                onChange={(e) => setPaymentFilter(e.target.value)}
-                className="px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg w-full focus:outline-none text-slate-650 cursor-pointer"
-              >
-                <option value="all">All Payment Statuses</option>
-                <option value="pending">Pending Payment</option>
-                <option value="paid">Prepaid / Paid</option>
-                <option value="failed">Failed Payment</option>
-                <option value="refunded">Refunded / Voided</option>
+              <select value={paymentFilter} onChange={(e) => setPaymentFilter(e.target.value)} className={PREMIUM_SELECT}>
+                <option value="all">All payment statuses</option>
+                <option value="pending">Pending payment</option>
+                <option value="paid">Paid</option>
+                <option value="failed">Failed</option>
+                <option value="refunded">Refunded</option>
               </select>
-            </div>
 
-            {/* Order Type Filter (Normal vs Overriden Backorder) */}
-            <div>
-              <select
-                value={orderTypeFilter}
-                onChange={(e) => setOrderTypeFilter(e.target.value as any)}
-                className="px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg w-full focus:outline-none text-slate-650 cursor-pointer font-medium"
-              >
-                <option value="all">All Order Types (Normal & Backorders)</option>
-                <option value="normal">Normal Orders Only</option>
-                <option value="backorder">Special Backorder Overrides</option>
+              <select value={orderTypeFilter} onChange={(e) => setOrderTypeFilter(e.target.value as any)} className={PREMIUM_SELECT}>
+                <option value="all">All order types</option>
+                <option value="normal">Normal orders</option>
+                <option value="backorder">Backorder overrides</option>
               </select>
-            </div>
 
-            {/* Sorting helper dropdown */}
-            <div>
               <select
                 value={`${sortField}-${sortOrder}`}
                 onChange={(e) => {
-                  const [field, order] = e.target.value.split('-') as [any, any];
+                  const [field, order] = e.target.value.split('-') as [typeof sortField, typeof sortOrder];
                   setSortField(field);
                   setSortOrder(order);
                 }}
-                className="px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg w-full focus:outline-none text-slate-650 cursor-pointer"
+                className={PREMIUM_SELECT}
               >
-                <option value="createdAt-desc">Order Date: Newest First</option>
-                <option value="createdAt-asc">Order Date: Oldest First</option>
-                <option value="preferredDeliveryDate-asc">Delivery Date: Earliest First</option>
-                <option value="preferredDeliveryDate-desc">Delivery Date: Latest First</option>
+                <option value="createdAt-desc">Newest orders first</option>
+                <option value="createdAt-asc">Oldest orders first</option>
+                <option value="preferredDeliveryDate-asc">Earliest delivery first</option>
+                <option value="preferredDeliveryDate-desc">Latest delivery first</option>
               </select>
             </div>
 
-            {/* Date Range Matcher */}
-            <div className="flex gap-2 items-center md:col-span-4 lg:col-span-1">
-              <div className="relative flex-1">
-                <Calendar className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-3" />
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="pl-8 pr-2 py-2 text-[10px] bg-slate-50 border border-slate-200 rounded-lg w-full font-mono focus:outline-none text-slate-700"
-                />
+            <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+              <div className="relative flex-1 max-w-[200px]">
+                <Calendar className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={`${PREMIUM_INPUT} pl-10 font-mono text-[11px]`} />
               </div>
-              <span className="text-slate-400 text-xs">to</span>
-              <div className="relative flex-1">
-                <Calendar className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-3" />
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="pl-8 pr-2 py-2 text-[10px] bg-slate-50 border border-slate-200 rounded-lg w-full font-mono focus:outline-none text-slate-700"
-                />
+              <span className="text-slate-400 text-xs text-center hidden sm:block">to</span>
+              <div className="relative flex-1 max-w-[200px]">
+                <Calendar className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className={`${PREMIUM_INPUT} pl-10 font-mono text-[11px]`} />
               </div>
-              {(startDate || endDate || searchQuery || statusFilter !== 'all' || paymentFilter !== 'all' || orderTypeFilter !== 'all') && (
-                <button
-                  type="button"
-                  onClick={() => { 
-                    setStartDate(''); 
-                    setEndDate(''); 
-                    setSearchQuery(''); 
-                    setStatusFilter('all'); 
-                    setPaymentFilter('all'); 
-                    setOrderTypeFilter('all');
-                  }}
-                  className="p-2 text-xs text-rose-600 hover:bg-rose-50 rounded bg-slate-50 border border-slate-150 cursor-pointer font-bold shrink-0 transition"
-                >
-                  Clear
-                </button>
-              )}
             </div>
           </div>
 
-          {/* Clean Dashboard Table Design */}
-          <div className="bg-white border border-slate-100 rounded-xl overflow-hidden shadow-xs">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-slate-600 border-collapse">
-                <thead className="bg-slate-50 border-b border-slate-100 text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
-                  <tr>
-                    <th className="py-3 px-4 font-mono">Ref ID</th>
-                    
-                    {/* Sortable Header - Order Date */}
-                    <th 
-                      onClick={() => handleToggleSort('createdAt')}
-                      className="py-3 px-4 cursor-pointer hover:bg-slate-100 select-none transition"
-                    >
-                      <div className="flex items-center gap-1">
-                        <span>Order Date</span>
-                        {sortField === 'createdAt' ? (
-                          sortOrder === 'asc' ? <ChevronUp className="w-3.5 h-3.5 text-amber-600" /> : <ChevronDown className="w-3.5 h-3.5 text-amber-600" />
-                        ) : (
-                          <ArrowUpDown className="w-3 h-3 text-slate-350" />
-                        )}
-                      </div>
-                    </th>
-
-                    {/* Sortable Header - Delivery Date */}
-                    <th 
-                      onClick={() => handleToggleSort('preferredDeliveryDate')}
-                      className="py-3 px-4 cursor-pointer hover:bg-slate-100 select-none transition"
-                    >
-                      <div className="flex items-center gap-1">
-                        <span>Delivery Date</span>
-                        {sortField === 'preferredDeliveryDate' ? (
-                          sortOrder === 'asc' ? <ChevronUp className="w-3.5 h-3.5 text-amber-600" /> : <ChevronDown className="w-3.5 h-3.5 text-amber-600" />
-                        ) : (
-                          <ArrowUpDown className="w-3 h-3 text-slate-350" />
-                        )}
-                      </div>
-                    </th>
-
-                    <th className="py-3 px-4">Sender Name & Details</th>
-                    <th className="py-3 px-4">Receiver Name & Logistics</th>
-                    <th className="py-3 px-4 max-w-xs">Hampers / Bought Items</th>
-                    <th className="py-3 px-4 text-right">Sum Amount</th>
-                    <th className="py-3 px-4 text-center">Payment Status</th>
-                    <th className="py-3 px-4 text-center">Fulfill Status</th>
-                    <th className="py-3 px-4 text-right font-semibold">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 font-sans">
-                  {sortedOrders.length === 0 ? (
-                    <tr>
-                      <td colSpan={10} className="py-12 text-center text-slate-400 font-medium font-mono text-xs">
-                        No orders matched criteria query.
-                      </td>
-                    </tr>
-                  ) : (
-                    paginatedAdminOrders.map(o => {
-                      const pStatus = o.paymentStatus || 'pending';
-                      return (
-                        <tr 
-                          key={o.id} 
-                          className="hover:bg-slate-100/40 transition-colors group cursor-pointer"
-                          onClick={() => setEditingOrder(o)}
-                        >
-                          {/* Ref ID */}
-                          <td className="py-3.5 px-4 font-mono font-bold">
-                            <div className="text-rose-600">{o.refId}</div>
-                            
-                            {/* API Partner Details */}
-                            {(o.apiPartnerId || o.refId?.startsWith('KO-API') || o.orderNote?.includes('API placed order') || o.apiPartnerUsername) && (() => {
-                              const partner = apiPartners.find((p: any) => p.id === o.apiPartnerId || p.username?.toLowerCase() === o.apiPartnerUsername?.toLowerCase());
-                              const partnerName = partner ? partner.integrationName : (o.apiPartnerUsername || 'API Partner');
-                              const partnerUserId = partner ? partner.id : (o.apiPartnerId || 'api_user');
-                              return (
-                                <div className="mt-1 flex flex-col items-start gap-0.5" onClick={(e) => e.stopPropagation()}>
-                                  <span className="inline-flex items-center gap-1 text-[9px] bg-indigo-50 text-indigo-700 border border-indigo-200/50 px-1.5 py-0.5 rounded-md font-extrabold uppercase">
-                                    🔌 {partnerName}
-                                  </span>
-                                  <span className="text-[8.5px] font-bold text-slate-400 block font-mono">
-                                    UID: {partnerUserId.substring(0, 16)}
-                                  </span>
-                                </div>
-                              );
-                            })()}
-                          </td>
-
-                          {/* Order Date */}
-                          <td className="py-3.5 px-4 text-slate-500 whitespace-nowrap">
-                            {new Date(o.createdAt).toLocaleDateString(undefined, { 
-                              year: 'numeric', 
-                              month: 'short', 
-                              day: 'numeric' 
-                            })}
-                          </td>
-
-                          {/* Preferred Delivery Date */}
-                          <td className="py-3.5 px-4 whitespace-nowrap font-bold">
-                            {o.preferredDeliveryDate ? (
-                              <div className="flex flex-col gap-1 text-left items-start">
-                                <div className="inline-flex items-center gap-1.5 text-emerald-700 bg-emerald-500/10 px-2 py-0.5 rounded-md text-[11px]">
-                                  <Calendar className="w-3 h-3 text-emerald-600" />
-                                  <span>{o.preferredDeliveryDate}</span>
-                                </div>
-                                {o.selectedTimeSlot && (
-                                  <span className="inline-flex items-center gap-1 text-pink-700 bg-pink-500/10 px-2 py-0.5 rounded-md text-[10px]">
-                                    <Clock className="w-2.5 h-2.5 text-pink-600" />
-                                    <span>{o.selectedTimeSlot}</span>
-                                  </span>
-                                )}
-                              </div>
-                            ) : (
-                              <span className="text-slate-400 font-medium">-</span>
-                            )}
-                          </td>
-
-                          {/* Sender Column */}
-                          <td className="py-3.5 px-4">
-                            <div className="font-semibold text-slate-800">{o.senderName || o.customerName}</div>
-                            <div className="text-[10px] text-slate-400 leading-normal">{o.senderEmail || o.customerEmail || 'Guest'}</div>
-                            <div className="text-[10px] text-slate-500 font-mono font-semibold mt-0.5">{o.senderPhone || o.customerPhone}</div>
-                          </td>
-
-                          {/* Receiver Column */}
-                          <td className="py-3.5 px-4">
-                            <div className="font-semibold text-slate-800">{o.receiverName || o.customerName}</div>
-                            <div className="text-[10px] text-slate-500 font-mono font-semibold">{o.receiverPhone || o.customerPhone}</div>
-                            <div className="text-[10px] text-slate-650 bg-slate-50 p-1.5 rounded border border-slate-200/40 mt-1.5 max-w-[180px] break-words">
-                              <div className="font-medium text-slate-700 leading-tight">{o.deliveryAddress || o.shippingAddress}</div>
-                              {o.deliveryDistrict && (
-                                <span className="text-[8px] font-extrabold text-amber-700 bg-amber-500/10 px-1 py-0.5 rounded inline-block mt-1 uppercase tracking-wider">
-                                  {o.deliveryDistrict}
-                                </span>
-                              )}
-                            </div>
-                          </td>
-
-                          {/* Items Column */}
-                          <td className="py-3.5 px-4 max-w-xs" onClick={(e) => e.stopPropagation()}>
-                            <div className="space-y-1.5">
-                              {o.items.map((item, idx) => (
-                                <div key={idx} className="border-b border-dashed border-slate-100 last:border-b-0 pb-1.5 last:pb-0 mb-1 last:mb-0">
-                                  <div className="font-semibold text-slate-700 leading-normal">
-                                    • {item.productName} <span className="text-slate-400 font-mono text-[10px]">x {item.quantity}</span>
-                                  </div>
-                                  {item.selectedVariations && item.selectedVariations.length > 0 && (
-                                    <div className="flex flex-wrap gap-1 mt-1 ml-2.5 justify-start text-left max-w-full">
-                                      {item.selectedVariations.map((vOpt, vOptIdx) => (
-                                        <span 
-                                          key={vOptIdx} 
-                                          className="inline-block text-[8px] font-mono px-1 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200/50 leading-none"
-                                        >
-                                          {vOpt.name}: <span className="font-extrabold">{vOpt.value}</span>
-                                        </span>
-                                      ))}
-                                    </div>
-                                  )}
-                                  {item.customMessage && (
-                                    <div className="ml-2.5 p-1 bg-amber-500/5 text-amber-900 border border-amber-200/40 rounded mt-0.5 text-[9.5px] leading-snug">
-                                      {item.customMessage}
-                                    </div>
-                                  )}
-                                  {item.customImageUrl && (
-                                    <div className="ml-2.5 flex items-center gap-2 mt-1">
-                                      <span className="text-[8px] font-black uppercase text-slate-400">File:</span>
-                                      <button 
-                                        type="button"
-                                        onClick={(e) => handleDownloadImage(item.customImageUrl!, `order-${o.refId || o.id}-item-${idx + 1}.png`, e)}
-                                        className="relative inline-block border hover:opacity-80 transition cursor-pointer group"
-                                        title="Click to download personalized image"
-                                      >
-                                        <img src={item.customImageUrl} referrerPolicy="no-referrer" className="w-8 h-8 object-cover rounded" alt="Upload" />
-                                        <span className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition text-white">
-                                          <Download className="w-3 h-3" />
-                                        </span>
-                                      </button>
-                                      <button 
-                                        type="button"
-                                        onClick={(e) => handleDownloadImage(item.customImageUrl!, `order-${o.refId || o.id}-item-${idx + 1}.png`, e)}
-                                        className="p-0.5 text-slate-400 hover:text-rose-600 rounded transition cursor-pointer"
-                                        title="Download attachment"
-                                      >
-                                        <Download className="w-3 h-3" />
-                                      </button>
-                                    </div>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          </td>
-
-                          {/* Sum Amount */}
-                          <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                            <div className="font-mono font-extrabold text-slate-850 text-sm">
-                              {o.currency} {o.totalAmount.toLocaleString()}
-                            </div>
-                            {o.currency !== 'NPR' && (
-                              <div className="text-[9.5px] text-slate-400 font-mono mt-0.5">
-                                (Base: NPR {o.totalAmountBase.toLocaleString()})
-                              </div>
-                            )}
-                            <div className="text-[9.5px] text-slate-400 mt-0.5 font-medium">{o.paymentMethod}</div>
-                          </td>
-
-                          {/* Payment Status */}
-                          <td className="py-3.5 px-4 text-center" onClick={(e) => e.stopPropagation()}>
-                            <span className={`inline-block px-2.5 py-1 text-[9px] tracking-wider uppercase font-black rounded-lg ${
-                              pStatus === 'paid' ? 'bg-emerald-50 text-emerald-650 border border-emerald-250' :
-                              pStatus === 'failed' ? 'bg-rose-50 text-rose-650 border border-rose-250 font-black' :
-                              pStatus === 'refunded' ? 'bg-slate-100 text-slate-600 border border-slate-200' :
-                              'bg-amber-50 text-amber-705 border border-amber-200 font-bold animate-pulse'
-                            }`}>
-                              {pStatus}
-                            </span>
-                          </td>
-                          <td className="py-3.5 px-4 text-center" onClick={(e) => e.stopPropagation()}>
-                            <select
-                              value={o.status}
-                              onChange={(e) => handleInitiateStatusChange(o.id, o.refId, o.status, e.target.value as OrderStatus)}
-                              className="p-1 text-[10px] font-bold border border-slate-200 rounded-md bg-slate-50 text-slate-700 cursor-pointer focus:outline-none"
-                            >
-                              <option value={OrderStatus.PENDING}>Payment Pending</option>
-                              <option value={OrderStatus.PAID}>Order Received</option>
-                              <option value={OrderStatus.PREPARING}>Preparing</option>
-                              <option value={OrderStatus.SHIPPED}>Dispatch</option>
-                              <option value={OrderStatus.DELIVERED}>Delivered</option>
-                              <option value={OrderStatus.CANCELLED}>Cancelled</option>
-                            </select>
-                          </td>
-
-                          {/* View Detail Action */}
-                          <td className="py-3.5 px-4 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                            <div className="flex gap-2 justify-end items-center">
-                              {/* WhatsApp Ping Customer */}
-                              <a
-                                href={getWhatsAppNotificationUrl(o, state.smtpSettings, false)}
-                                target="_blank"
-                                rel="noreferrer"
-                                title="Send WhatsApp Update to Customer"
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[10.5px] font-extrabold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-250 rounded-lg transition-all hover:scale-[1.02] cursor-pointer font-sans no-underline"
-                              >
-                                <span className="text-xs">💬</span>
-                                <span className="hidden sm:inline font-bold">WhatsApp Client</span>
-                              </a>
-
-                              {/* WhatsApp Ping Admin logistics line */}
-                              {state.smtpSettings?.notificationWhatsapp && state.smtpSettings?.whatsappEnabled && (
-                                <a
-                                  href={getWhatsAppNotificationUrl(o, state.smtpSettings, true)}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  title="Dispatch WhatsApp Alert to Admin Logistics"
-                                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[10.5px] font-extrabold text-indigo-800 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition-all hover:scale-[1.02] cursor-pointer font-sans no-underline"
-                                >
-                                  <span className="text-xs">🔔</span>
-                                  <span className="hidden sm:inline font-bold">Admin Ping</span>
-                                </a>
-                              )}
-
-                              <button
-                                type="button"
-                                onClick={() => setEditingOrder(o)}
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[10.5px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-250 rounded-lg hover:bg-amber-500 hover:text-white hover:border-amber-500 transition-all cursor-pointer font-sans shadow-2xs"
-                              >
-                                <Edit className="w-3.5 h-3.5" />
-                                <span>View & Edit</span>
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
+          {/* Premium order cards */}
+          <div className="space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-1">
+              <p className="text-sm font-bold text-slate-800">
+                {sortedOrders.length} order{sortedOrders.length !== 1 ? 's' : ''}
+                {sortedOrders.length > 0 && (
+                  <span className="text-slate-400 font-medium ml-2">
+                    · page {adminOrdersPage} of {totalAdminOrdersPages}
+                  </span>
+                )}
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleToggleSort('createdAt')}
+                  className={`inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-bold rounded-xl border transition ${
+                    sortField === 'createdAt'
+                      ? 'bg-pink-50 border-[#E91E63]/30 text-[#E91E63]'
+                      : 'bg-white border-pink-100 text-slate-500 hover:border-pink-200'
+                  }`}
+                >
+                  Order date
+                  {sortField === 'createdAt' && (sortOrder === 'asc' ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />)}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleToggleSort('preferredDeliveryDate')}
+                  className={`inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-bold rounded-xl border transition ${
+                    sortField === 'preferredDeliveryDate'
+                      ? 'bg-pink-50 border-[#E91E63]/30 text-[#E91E63]'
+                      : 'bg-white border-pink-100 text-slate-500 hover:border-pink-200'
+                  }`}
+                >
+                  Delivery date
+                  {sortField === 'preferredDeliveryDate' && (sortOrder === 'asc' ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />)}
+                </button>
+              </div>
             </div>
 
-            {totalAdminOrdersPages > 1 && (
-              <div className="bg-slate-50 border-t border-slate-100 px-4 py-3.5 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs font-semibold text-slate-500">
-                <div>
-                  Showing <strong className="text-slate-800">{Math.min(sortedOrders.length, (adminOrdersPage - 1) * itemsPerPage + 1)}-{Math.min(sortedOrders.length, adminOrdersPage * itemsPerPage)}</strong> of <strong className="text-slate-800">{sortedOrders.length}</strong> fulfillment orders
+            {sortedOrders.length === 0 ? (
+              <div className={`${TABLE_WRAPPER} py-16 text-center`}>
+                <div className="flex flex-col items-center gap-3">
+                  <div className="w-14 h-14 rounded-2xl bg-pink-50 flex items-center justify-center">
+                    <Package className="w-7 h-7 text-[#E91E63]/60" />
+                  </div>
+                  <p className="text-sm font-bold text-slate-600">No orders match your filters</p>
+                  <p className="text-xs text-slate-400">Try adjusting search or filter criteria.</p>
                 </div>
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <button
-                    type="button"
-                    disabled={adminOrdersPage === 1}
-                    onClick={() => setAdminOrdersPage(1)}
-                    className="p-1 px-2.5 bg-white hover:bg-slate-100 border border-slate-200 rounded text-slate-600 disabled:opacity-40 disabled:hover:bg-white select-none transition cursor-pointer"
-                  >
-                    First
-                  </button>
-                  <button
-                    type="button"
-                    disabled={adminOrdersPage === 1}
-                    onClick={() => setAdminOrdersPage(prev => Math.max(1, prev - 1))}
-                    className="p-1.5 px-2.5 bg-white hover:bg-slate-100 border border-slate-200 rounded text-slate-600 disabled:opacity-40 disabled:hover:bg-white select-none transition cursor-pointer"
-                  >
-                    Prev
-                  </button>
-                  <span className="px-3 py-1 font-bold text-slate-800 bg-white/50 border border-slate-200 rounded">
-                    {adminOrdersPage} / {totalAdminOrdersPages}
-                  </span>
-                  <button
-                    type="button"
-                    disabled={adminOrdersPage === totalAdminOrdersPages}
-                    onClick={() => setAdminOrdersPage(prev => Math.min(totalAdminOrdersPages, prev + 1))}
-                    className="p-1.5 px-2.5 bg-white hover:bg-slate-100 border border-slate-200 rounded text-slate-600 disabled:opacity-40 disabled:hover:bg-white select-none transition cursor-pointer"
-                  >
-                    Next
-                  </button>
-                  <button
-                    type="button"
-                    disabled={adminOrdersPage === totalAdminOrdersPages}
-                    onClick={() => setAdminOrdersPage(totalAdminOrdersPages)}
-                    className="p-1 px-2.5 bg-white hover:bg-slate-100 border border-slate-200 rounded text-slate-600 disabled:opacity-40 disabled:hover:bg-white select-none transition cursor-pointer"
-                  >
-                    Last
-                  </button>
-                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {paginatedAdminOrders.map((o) => (
+                  <OrderFulfillmentCard
+                    key={o.id}
+                    order={o}
+                    apiPartners={apiPartners}
+                    smtpSettings={state.smtpSettings}
+                    onView={setEditingOrder}
+                    onStatusChange={handleInitiateStatusChange}
+                    onDownloadImage={handleDownloadImage}
+                  />
+                ))}
+              </div>
+            )}
+
+            {sortedOrders.length > 0 && (
+              <div className={`${TABLE_WRAPPER} mt-2 overflow-hidden`}>
+                <FulfillmentPagination
+                  page={adminOrdersPage}
+                  totalPages={totalAdminOrdersPages}
+                  totalItems={sortedOrders.length}
+                  pageSize={ordersPageSize}
+                  itemLabel="orders"
+                  onPageChange={setAdminOrdersPage}
+                  onPageSizeChange={setOrdersPageSize}
+                />
               </div>
             )}
           </div>
         </div>
       ) : activeSegment === 'leads' ? (
-        /* LEADS PIPELINE LOG */
         <div className="space-y-4">
-          <div className="p-4 bg-emerald-50 text-emerald-800 border border-emerald-100 rounded-lg text-xs leading-relaxed">
-            💡 <strong>Leads are created</strong> when a client begins checking out and enters their contacts but fails or leaves. 
-            Reaching out via custom WhatsApp templates restores up to <strong>15% of abandoned carts!</strong>
+          <div className="p-4 bg-gradient-to-r from-emerald-50 to-teal-50/50 border border-emerald-100/80 rounded-2xl text-xs leading-relaxed text-emerald-900">
+            <strong>Recover abandoned carts.</strong> Leads are created when checkout starts but payment never completes. A timely WhatsApp follow-up can recover up to 15% of lost sales.
           </div>
 
-          <div className="bg-white border border-slate-100 rounded-xl overflow-hidden shadow-xs">
-            <table className="w-full text-left text-sm text-slate-650">
-              <thead className="bg-slate-50 border-b border-slate-100 text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+          <div className={TABLE_WRAPPER}>
+            <table className="w-full text-left text-sm text-slate-650 fulfillment-table">
+              <thead className={TABLE_HEAD}>
                 <tr>
                   <th className="p-3">Ref Date</th>
                   <th className="p-3">Client Information</th>
@@ -1071,88 +945,50 @@ export default function OrdersTab({ state, onUpdateState }: OrdersTabProps) {
               </tbody>
             </table>
 
-            {totalAdminLeadsPages > 1 && (
-              <div className="bg-slate-50 border-t border-slate-100 px-4 py-3.5 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs font-semibold text-slate-500">
-                <div>
-                  Showing <strong className="text-slate-800">{Math.min(state.leads.length, (adminLeadsPage - 1) * itemsPerPage + 1)}-{Math.min(state.leads.length, adminLeadsPage * itemsPerPage)}</strong> of <strong className="text-slate-800">{state.leads.length}</strong> follow-up leads
-                </div>
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <button
-                    type="button"
-                    disabled={adminLeadsPage === 1}
-                    onClick={() => setAdminLeadsPage(1)}
-                    className="p-1 px-2.5 bg-white hover:bg-slate-100 border border-slate-200 rounded text-slate-600 disabled:opacity-40 disabled:hover:bg-white select-none transition cursor-pointer"
-                  >
-                    First
-                  </button>
-                  <button
-                    type="button"
-                    disabled={adminLeadsPage === 1}
-                    onClick={() => setAdminLeadsPage(prev => Math.max(1, prev - 1))}
-                    className="p-1.5 px-2.5 bg-white hover:bg-slate-100 border border-slate-200 rounded text-slate-600 disabled:opacity-40 disabled:hover:bg-white select-none transition cursor-pointer"
-                  >
-                    Prev
-                  </button>
-                  <span className="px-3 py-1 font-bold text-slate-800 bg-white/50 border border-slate-200 rounded">
-                    {adminLeadsPage} / {totalAdminLeadsPages}
-                  </span>
-                  <button
-                    type="button"
-                    disabled={adminLeadsPage === totalAdminLeadsPages}
-                    onClick={() => setAdminLeadsPage(prev => Math.min(totalAdminLeadsPages, prev + 1))}
-                    className="p-1.5 px-2.5 bg-white hover:bg-slate-100 border border-slate-200 rounded text-slate-600 disabled:opacity-40 disabled:hover:bg-white select-none transition cursor-pointer"
-                  >
-                    Next
-                  </button>
-                  <button
-                    type="button"
-                    disabled={adminLeadsPage === totalAdminLeadsPages}
-                    onClick={() => setAdminLeadsPage(totalAdminLeadsPages)}
-                    className="p-1 px-2.5 bg-white hover:bg-slate-100 border border-slate-200 rounded text-slate-600 disabled:opacity-40 disabled:hover:bg-white select-none transition cursor-pointer"
-                  >
-                    Last
-                  </button>
-                </div>
-              </div>
+            {state.leads.length > 0 && (
+              <FulfillmentPagination
+                page={adminLeadsPage}
+                totalPages={totalAdminLeadsPages}
+                totalItems={state.leads.length}
+                pageSize={leadsPageSize}
+                itemLabel="leads"
+                onPageChange={setAdminLeadsPage}
+                onPageSizeChange={setLeadsPageSize}
+              />
             )}
           </div>
         </div>
       ) : (
-        /* REMINDERS PIPELINE SEGMENT */
         <div className="space-y-4">
-          <div className="p-4 bg-rose-50 text-rose-800 border border-rose-100 rounded-lg text-xs leading-relaxed">
-            💡 <strong>Special Day Reminder Systems</strong> are registered by customer clients inside their private profile lounges. 
-            Check upcoming family events, birthdays, or anniversaries, and click the Solicitation trigger button to remind them of timely booking options!
+          <div className="p-4 bg-gradient-to-r from-rose-50 to-pink-50/50 border border-pink-100/80 rounded-2xl text-xs leading-relaxed text-rose-900">
+            <strong>Special day reminders</strong> are saved by customers for birthdays, anniversaries, and celebrations. Send timely outreach before their event date.
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="p-4 bg-white border border-slate-100 rounded-xl space-y-1 shadow-2xs">
-              <span className="text-[10px] font-bold text-slate-400 uppercase">Total User Reminders</span>
-              <span className="text-xl font-mono font-extrabold text-slate-805">
-                {(state.specialDayReminders || []).length}
-              </span>
-            </div>
-            <div className="p-4 bg-white border border-slate-100 rounded-xl space-y-1 shadow-2xs">
-              <span className="text-[10px] font-bold text-slate-400 uppercase">Dispatched Alerts</span>
-              <span className="text-xl font-mono font-extrabold text-emerald-600">
-                {(state.specialDayReminders || []).filter(r => r.autoReminded).length}
-              </span>
-            </div>
-            <div className="p-4 bg-white border border-slate-100 rounded-xl space-y-1 shadow-2xs">
-              <span className="text-[10px] font-bold text-slate-400 uppercase">Active Queues</span>
-              <span className="text-xl font-mono font-extrabold text-[#a855f7]">
-                {(state.specialDayReminders || []).filter(r => !r.autoReminded).length}
-              </span>
-            </div>
-            <div className="p-4 bg-white border border-slate-100 rounded-xl space-y-1 shadow-2xs">
-              <span className="text-[10px] font-bold text-slate-400 uppercase">Conversion Rate</span>
-              <span className="text-xl font-mono font-extrabold text-amber-600">12.5%</span>
-            </div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {[
+              { label: 'Total Reminders', value: (state.specialDayReminders || []).length, accent: 'rose' },
+              { label: 'Alerts Sent', value: (state.specialDayReminders || []).filter(r => r.autoReminded).length, accent: 'emerald' },
+              { label: 'Pending Queue', value: (state.specialDayReminders || []).filter(r => !r.autoReminded).length, accent: 'violet' },
+              { label: 'Est. Conversion', value: '12.5%', accent: 'amber' },
+            ].map((stat) => {
+              const accentMap: Record<string, string> = {
+                rose: 'from-rose-50 to-pink-50/50 border-pink-100/80',
+                emerald: 'from-emerald-50 to-teal-50/50 border-emerald-100/80',
+                violet: 'from-violet-50 to-purple-50/50 border-violet-100/80',
+                amber: 'from-amber-50 to-orange-50/50 border-amber-100/80',
+              };
+              return (
+                <div key={stat.label} className={`p-4 rounded-2xl border bg-gradient-to-br shadow-sm ${accentMap[stat.accent]}`}>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-1">{stat.label}</span>
+                  <span className="text-xl font-bold text-slate-900 font-mono">{stat.value}</span>
+                </div>
+              );
+            })}
           </div>
 
-          <div className="bg-white border border-slate-100 rounded-xl overflow-hidden shadow-xs">
-            <table className="w-full text-left text-sm text-slate-650">
-              <thead className="bg-slate-50 border-b border-slate-100 text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+          <div className={TABLE_WRAPPER}>
+            <table className="w-full text-left text-sm text-slate-650 fulfillment-table">
+              <thead className={TABLE_HEAD}>
                 <tr>
                   <th className="p-3">Registered Date</th>
                   <th className="p-3">Client Email / WhatsApp No.</th>
@@ -1171,7 +1007,7 @@ export default function OrdersTab({ state, onUpdateState }: OrdersTabProps) {
                     </td>
                   </tr>
                 ) : (
-                  state.specialDayReminders.map(rem => (
+                  paginatedReminders.map(rem => (
                     <tr key={rem.id} className="hover:bg-slate-55 transition text-xs">
                       <td className="p-3 font-mono text-slate-400 font-bold">
                         {rem.createdAt || 'N/A'}
@@ -1207,7 +1043,7 @@ export default function OrdersTab({ state, onUpdateState }: OrdersTabProps) {
                             onUpdateState({ ...state, specialDayReminders: list });
                             alert(`🎉 Manual Order Solicitation Email successfully dispatched to client ${rem.email} for celebrant ${rem.name}!`);
                           }}
-                          className="px-3.5 py-1 font-bold text-[9.5px] tracking-wide uppercase bg-rose-600 hover:bg-rose-700 text-white rounded cursor-pointer transition shadow-xs"
+                          className="px-3.5 py-1.5 font-bold text-[9.5px] tracking-wide uppercase bg-gradient-to-r from-[#E91E63] to-[#C2185B] hover:from-[#D81B60] hover:to-[#AD1457] text-white rounded-xl cursor-pointer transition shadow-sm"
                         >
                           📣 Solicitation Alert
                         </button>
@@ -1217,26 +1053,37 @@ export default function OrdersTab({ state, onUpdateState }: OrdersTabProps) {
                 )}
               </tbody>
             </table>
+            {remindersList.length > 0 && (
+              <FulfillmentPagination
+                page={adminRemindersPage}
+                totalPages={totalAdminRemindersPages}
+                totalItems={remindersList.length}
+                pageSize={remindersPageSize}
+                itemLabel="reminders"
+                onPageChange={setAdminRemindersPage}
+                onPageSizeChange={setRemindersPageSize}
+              />
+            )}
           </div>
         </div>
       )}
 
       {/* VIEW & EDIT ORDER DETAILED OVERLAY MODAL */}
       {editingOrder && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-[150] p-4 text-slate-850">
-          <div className="bg-white rounded-xl shadow-2xl border border-slate-200/80 w-full max-w-4xl p-6 relative max-h-[92vh] flex flex-col animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[150] p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-pink-100/80 w-full max-w-4xl p-6 relative max-h-[92vh] flex flex-col">
             
-            {/* Modal Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 shrink-0">
+            <div className="flex items-center justify-between pb-4 border-b border-pink-100/60 shrink-0">
               <div className="flex items-center gap-3">
-                <ClipboardList className="w-5 h-5 text-amber-600" />
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#E91E63] to-[#C2185B] text-white flex items-center justify-center shadow-md shadow-pink-900/15">
+                  <ClipboardList className="w-5 h-5" />
+                </div>
                 <div>
-                  <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
-                    <span>Order Details:</span>
-                    <span className="text-rose-600 font-mono font-black">{editingOrder.refId}</span>
+                  <h3 className="font-bold text-slate-900 text-base flex items-center gap-2 flex-wrap">
+                    Order <span className="text-[#E91E63] font-mono">{editingOrder.refId}</span>
                   </h3>
-                  <p className="text-[11px] text-slate-400 font-mono">
-                    Placed On: {new Date(editingOrder.createdAt).toLocaleString()}
+                  <p className="text-[11px] text-slate-500 font-mono mt-0.5">
+                    Placed {new Date(editingOrder.createdAt).toLocaleString()}
                   </p>
                   {/* API Partner Details on order in processing modal */}
                   {(editingOrder.apiPartnerId || editingOrder.refId?.startsWith('KO-API') || editingOrder.orderNote?.includes('API placed order') || editingOrder.apiPartnerUsername) && (() => {
@@ -1256,8 +1103,9 @@ export default function OrdersTab({ state, onUpdateState }: OrdersTabProps) {
                 </div>
               </div>
               <button 
+                type="button"
                 onClick={() => setEditingOrder(null)}
-                className="p-1 hover:bg-slate-100 rounded-md text-slate-400 hover:text-slate-700 transition cursor-pointer"
+                className="w-9 h-9 rounded-xl hover:bg-pink-50 text-slate-400 hover:text-[#E91E63] transition flex items-center justify-center"
               >
                 <XCircle className="w-5 h-5" />
               </button>
@@ -1666,20 +1514,12 @@ export default function OrdersTab({ state, onUpdateState }: OrdersTabProps) {
                 </a>
               )}
 
-              <button
-                type="button"
-                onClick={() => setEditingOrder(null)}
-                className="px-4.5 py-2 font-bold text-slate-650 bg-slate-100 border border-slate-200 rounded-lg hover:bg-slate-200 transition cursor-pointer text-xs"
-              >
-                Cancel & Back
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSaveOrderEdit(editingOrder)}
-                className="px-5 py-2 font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-lg shadow-sm transition cursor-pointer text-xs font-sans"
-              >
-                Save Order Changes
-              </button>
+              <AdminGhostButton onClick={() => setEditingOrder(null)} className="!py-2">
+                Cancel
+              </AdminGhostButton>
+              <AdminPrimaryButton onClick={() => handleSaveOrderEdit(editingOrder)} className="!py-2">
+                Save changes
+              </AdminPrimaryButton>
             </div>
 
           </div>
@@ -1688,47 +1528,46 @@ export default function OrdersTab({ state, onUpdateState }: OrdersTabProps) {
 
       {/* Inline Quick transition alert dialog prompt */}
       {pendingStatusChange && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-[200] p-4 text-slate-800">
-          <div className="bg-white rounded-xl shadow-2xl border border-slate-200/85 w-full max-w-md p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150 text-left">
-            <div className="flex items-center gap-2.5 pb-2 border-b border-rose-100">
-              <AlertCircle className="w-5 h-5 text-amber-500" />
-              <h4 className="font-bold text-slate-900 text-sm">Confirm Status Update</h4>
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[200] p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-pink-100/80 w-full max-w-md p-6 space-y-4 text-left">
+            <div className="flex items-center gap-3 pb-3 border-b border-pink-100/60">
+              <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                <AlertCircle className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="font-bold text-slate-900 text-sm">Confirm status update</h4>
+                <p className="text-[11px] text-slate-500">This may adjust inventory if cancelled.</p>
+              </div>
             </div>
             
-            <div className="space-y-2 text-xs text-slate-600">
+            <div className="space-y-3 text-xs text-slate-600">
               <p className="leading-relaxed">
-                You are updating the fulfillment pipeline for Order <strong className="text-rose-600 font-mono uppercase bg-rose-50 px-1.5 py-0.5 rounded">{pendingStatusChange.orderRef}</strong>.
+                Update order <strong className="text-[#E91E63] font-mono bg-pink-50 px-1.5 py-0.5 rounded">{pendingStatusChange.orderRef}</strong> fulfillment status?
               </p>
-              <div className="bg-slate-50 border border-slate-200/60 rounded-lg p-3 space-y-1.5 font-mono">
-                <div className="flex justify-between items-center text-[11px]">
-                  <span className="text-slate-400 uppercase font-black tracking-wider text-[9px]">Sender Current State:</span>
-                  <span className="uppercase text-slate-700 font-extrabold">{pendingStatusChange.currentStatus}</span>
+              <div className="bg-gradient-to-br from-pink-50/50 to-white border border-pink-100/80 rounded-xl p-4 space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500 font-semibold">Current</span>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${ORDER_STATUS_BADGE[pendingStatusChange.currentStatus]}`}>
+                    {ORDER_STATUS_LABELS[pendingStatusChange.currentStatus]}
+                  </span>
                 </div>
-                <div className="flex justify-between items-center text-[11px]">
-                  <span className="text-amber-600 uppercase font-black tracking-wider text-[9px]">Transition Target:</span>
-                  <span className="uppercase text-amber-800 font-extrabold">{pendingStatusChange.newStatus}</span>
+                <div className="flex justify-center text-slate-300">↓</div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500 font-semibold">New status</span>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${ORDER_STATUS_BADGE[pendingStatusChange.newStatus]}`}>
+                    {ORDER_STATUS_LABELS[pendingStatusChange.newStatus]}
+                  </span>
                 </div>
               </div>
-              <p className="text-[10px] text-slate-400">
-                Proceeding will record the change and trigger stock recoveries if transitioning to a cancelled state.
-              </p>
             </div>
 
-            <div className="flex justify-end gap-2.5 pt-2 text-xs">
-              <button
-                type="button"
-                onClick={() => setPendingStatusChange(null)}
-                className="px-4 py-2 font-bold text-slate-605 bg-slate-100 border border-slate-200 rounded-lg hover:bg-slate-200 transition cursor-pointer text-xs"
-              >
-                No, Discard
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmStatusChange}
-                className="px-4.5 py-2 font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-sm transition cursor-pointer text-xs font-sans"
-              >
-                Yes, Save Changes
-              </button>
+            <div className="flex justify-end gap-2.5 pt-2">
+              <AdminGhostButton onClick={() => setPendingStatusChange(null)}>
+                Cancel
+              </AdminGhostButton>
+              <AdminPrimaryButton onClick={handleConfirmStatusChange}>
+                Confirm update
+              </AdminPrimaryButton>
             </div>
           </div>
         </div>

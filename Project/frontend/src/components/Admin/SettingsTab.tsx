@@ -2406,11 +2406,11 @@ export default function SettingsTab({ state, onUpdateState }: SettingsTabProps) 
             </div>
 
             <p className="text-xs text-slate-500 font-sans leading-normal">
-              Toggle payment integrations and specify your sandbox keys, merchant hash secrets, and merchant codes. The four checkout options below (COD, eSewa, Khalti, Fonepay) always appear for customers — disabled methods show as <strong>Not available</strong>. Credentials can also be set in <code className="text-[10px] bg-slate-100 px-1 rounded">.env</code> — admin values override env when filled.
+              Toggle payment integrations and specify your sandbox keys, merchant hash secrets, and merchant codes. Checkout options (COD, eSewa, Khalti, Fonepay, Visa/Mastercard) always appear for customers — disabled methods show as <strong>Not available</strong>. Credentials can also be set in <code className="text-[10px] bg-slate-100 px-1 rounded">.env</code> — admin values override env when filled.
             </p>
 
-            {/* Quick controls for the 4 checkout payment slots */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-2">
+            {/* Quick controls for checkout payment slots */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 mt-2">
               {CHECKOUT_PAYMENT_SLOTS.map((slot) => {
                 const slotEnabled = isCheckoutSlotEnabled(paymentGateways, slot.id);
                 const linkedGateway = paymentGateways.find((g) => slot.gatewayIds.includes(g.id));
@@ -2436,7 +2436,9 @@ export default function SettingsTab({ state, onUpdateState }: SettingsTabProps) 
                               ? 'eSewa'
                               : slot.id === 'khalti'
                                 ? 'Khalti'
-                                : 'Fonepay'}
+                                : slot.id === 'cards'
+                                  ? 'Visa / MC'
+                                  : 'Fonepay'}
                         </span>
                       </div>
                       <button
@@ -3213,7 +3215,7 @@ export default function SettingsTab({ state, onUpdateState }: SettingsTabProps) 
                         )}
                       </span>
                       <div className="flex items-center gap-2">
-                        {(gw.id === 'esewa' || gw.id === 'khalti' || gw.id.startsWith('fonepay')) && (
+                        {(gw.id === 'esewa' || gw.id === 'khalti' || gw.id.startsWith('fonepay') || gw.id === 'nps') && (
                           <button
                             type="button"
                             disabled={gatewayTesting === gw.id}

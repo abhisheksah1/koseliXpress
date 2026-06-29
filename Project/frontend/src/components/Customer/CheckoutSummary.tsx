@@ -7,6 +7,7 @@ import {
   getFirstSelectablePaymentGatewayId,
   isPaymentGatewaySelectable,
 } from '../../utils/checkoutPayments';
+import { PaymentSelector } from '../../modules/payment';
 
 interface CheckoutSummaryProps {
   isLight: boolean;
@@ -553,91 +554,18 @@ export default function CheckoutSummary({
           </div>
         </div>
 
-        {/* Payment methods — always show COD, eSewa, Khalti, Fonepay */}
+        {/* Payment methods */}
         <div className="space-y-2.5">
           <span className="text-[10.5px] font-bold text-slate-700 block">Choose Payment Method</span>
-          <div className="grid grid-cols-2 gap-3">
-            {checkoutPaymentOptions.map((option) => {
-              const gw = option.gateway;
-              const isSelected = paymentMethod === option.gatewayId;
-              const isDisabled = !option.isSelectable;
-
-              return (
-                <button
-                  key={option.slotId}
-                  type="button"
-                  disabled={isDisabled}
-                  onClick={() => {
-                    if (option.isSelectable) setPaymentMethod(option.gatewayId);
-                  }}
-                  title={isDisabled ? option.unavailableReason : undefined}
-                  className={`p-3 rounded-xl border text-center flex flex-col items-center justify-center gap-2 transition relative overflow-hidden min-h-[108px] ${
-                    isDisabled
-                      ? 'bg-slate-50 border-slate-200 text-slate-400 cursor-not-allowed opacity-80'
-                      : isSelected
-                        ? 'bg-[#FCE4EC]/40 border-[#E91E63] text-slate-800 font-bold shadow-sm ring-1 ring-[#E91E63]/20 cursor-pointer hover:border-[#E91E63]/40'
-                        : 'bg-white border-pink-100 text-slate-700 cursor-pointer hover:border-[#E91E63]/40'
-                  }`}
-                >
-                  {isSelected && option.isSelectable && (
-                    <span className="absolute top-0 right-0 bg-[#E91E63] text-white font-bold text-[8px] font-mono px-1.5 py-0.5 rounded-bl">
-                      ✓
-                    </span>
-                  )}
-
-                  {isDisabled && (
-                    <span className="absolute top-0 right-0 bg-slate-400 text-white font-bold text-[7px] uppercase tracking-wide px-1.5 py-0.5 rounded-bl">
-                      Unavailable
-                    </span>
-                  )}
-
-                  {gw?.logoUrl && !isDisabled ? (
-                    <div className="h-10 w-16 shrink-0 flex items-center justify-center bg-white rounded-lg border border-slate-200 overflow-hidden shadow-sm">
-                      <img
-                        src={gw.logoUrl}
-                        alt={option.displayName}
-                        className="h-full w-full object-contain p-0.5"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).style.display = 'none';
-                        }}
-                      />
-                    </div>
-                  ) : (
-                    <CheckCircle2
-                      className={`w-6 h-6 shrink-0 ${
-                        isDisabled ? 'text-slate-300' : isSelected ? 'text-[#E91E63]' : 'text-slate-400'
-                      }`}
-                    />
-                  )}
-
-                  <div className="min-w-0 w-full">
-                    <span
-                      className={`text-[10px] block font-bold leading-tight line-clamp-2 ${
-                        isDisabled ? 'text-slate-400' : 'text-slate-800'
-                      }`}
-                    >
-                      {option.slotId === 'cod'
-                        ? 'Cash on Delivery'
-                        : option.slotId === 'esewa'
-                          ? 'eSewa'
-                          : option.slotId === 'khalti'
-                            ? 'Khalti'
-                            : 'Fonepay'}
-                    </span>
-                    {isDisabled && option.unavailableReason && (
-                      <span className="text-[8.5px] block mt-1 leading-snug text-slate-400 font-medium px-1">
-                        {option.unavailableReason}
-                      </span>
-                    )}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
+          <PaymentSelector
+            options={checkoutPaymentOptions}
+            selectedGatewayId={paymentMethod}
+            onSelect={setPaymentMethod}
+          />
 
           {!hasSelectablePayment && (
             <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-[10.5px] text-amber-900 leading-relaxed">
-              No payment methods are currently enabled. Ask the store admin to enable COD, eSewa, Khalti, or Fonepay under{' '}
+              No payment methods are currently enabled. Ask the store admin to enable COD, eSewa, Khalti, Fonepay, or Visa/Mastercard under{' '}
               <strong>Admin → Settings → Payment Gateways</strong>.
             </div>
           )}

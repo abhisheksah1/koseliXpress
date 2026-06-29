@@ -1,6 +1,6 @@
 import { PaymentGateway } from '../types';
 
-export type CheckoutPaymentSlotId = 'cod' | 'esewa' | 'khalti' | 'fonepay';
+export type CheckoutPaymentSlotId = 'cod' | 'esewa' | 'khalti' | 'fonepay' | 'cards';
 
 export interface CheckoutPaymentSlot {
   id: CheckoutPaymentSlotId;
@@ -8,12 +8,13 @@ export interface CheckoutPaymentSlot {
   displayName: string;
 }
 
-/** Fixed four checkout payment options shown to customers */
+/** Checkout payment options shown to customers */
 export const CHECKOUT_PAYMENT_SLOTS: CheckoutPaymentSlot[] = [
   { id: 'cod', gatewayIds: ['cod'], displayName: 'Cash on Delivery (COD)' },
   { id: 'esewa', gatewayIds: ['esewa'], displayName: 'eSewa Wallet Payment' },
   { id: 'khalti', gatewayIds: ['khalti'], displayName: 'Khalti Mobile Wallet' },
   { id: 'fonepay', gatewayIds: ['fonepay_static', 'fonepay_dynamic'], displayName: 'Fonepay QR Pay' },
+  { id: 'cards', gatewayIds: ['nps'], displayName: 'Visa / Mastercard' },
 ];
 
 export function isGatewayCurrencyCompatible(gw: PaymentGateway, currencyCode: string): boolean {
@@ -24,8 +25,8 @@ export function isGatewayCurrencyCompatible(gw: PaymentGateway, currencyCode: st
   if (gw.id === 'cod' || gw.id === 'esewa' || gw.id === 'khalti' || gw.id.startsWith('fonepay')) {
     return code === 'NPR';
   }
-  if (gw.id === 'nps' || gw.id === 'nabil') {
-    return code !== 'NPR';
+  if (gw.id === 'nps') {
+    return code === 'NPR' || code === 'USD';
   }
   return true;
 }

@@ -8,8 +8,8 @@ import GiftLoungeBackdrop from './GiftLoungeBackdrop';
 import { CheckoutStepBanner } from './CheckoutUI';
 import { sendOrderStatusEmail } from '../../utils/emailHelper';
 import { getWhatsAppNotificationUrl } from '../../utils/whatsappHelper';
-import { initiateEsewaCheckout, initiateKhaltiCheckout } from '../../utils/paymentHelpers';
-import { savePendingKhaltiCheckout } from '../../utils/khaltiCheckout';
+import { initiateEsewaCheckout, initiateKhaltiCheckout, initiateNpsCheckout, redirectToNpsHostedPage } from '../../utils/paymentHelpers';
+import { savePendingRedirectCheckout, type PendingRedirectCheckout } from '../../utils/pendingCheckout';
 import {
   getFirstSelectablePaymentGatewayId,
   isPaymentGatewaySelectable,
@@ -98,12 +98,6 @@ export default function CartDrawer({
   const [orderSummaryRef, setOrderSummaryRef] = useState<string>('');
   const [isOrderSummaryOpen, setIsOrderSummaryOpen] = useState<boolean>(false);
   const [isRedirectingPayment, setIsRedirectingPayment] = useState<boolean>(false);
-
-  // Gateway specific text controls (NPS card simulator only — Khalti/eSewa use official redirect)
-  const [npsCardNumber, setNpsCardNumber] = useState<string>('');
-  const [npsCardExpiry, setNpsCardExpiry] = useState<string>('');
-  const [npsCardCvv, setNpsCardCvv] = useState<string>('');
-  const [npsCardholderName, setNpsCardholderName] = useState<string>('');
 
   // Encryption logs flow
   const [isVerifyingPaymentFlow, setIsVerifyingPaymentFlow] = useState<boolean>(false);
@@ -277,6 +271,39 @@ export default function CartDrawer({
   const grandTotalConverted = Math.max(0, subtotalConverted + totalFeesConverted + deliveryChargeConverted + timeSlotChargeConverted - discountConverted);
   const grandTotalBase = grandTotalConverted / rate;
 
+  const buildPendingRedirectPayload = (
+    refId: string,
+    gateway: PendingRedirectCheckout['paymentGateway'],
+  ): PendingRedirectCheckout => ({
+    refId,
+    paymentGateway: gateway,
+    cartItems,
+    senderName: senderName.trim(),
+    senderEmail: senderEmail.trim(),
+    senderPhone: senderPhone.trim(),
+    receiverName: receiverName.trim(),
+    receiverPhone: receiverPhone.trim(),
+    deliveryDistrictId: selectedDistrict?.id || deliveryDistrictId,
+    deliveryDistrictName: selectedDistrict?.name || manualDeliveryDistrict.trim(),
+    deliveryAddress: deliveryAddress.trim(),
+    orderNote,
+    preferredDeliveryDate,
+    selectedFeeIds,
+    serviceFeeInputs,
+    appliedCouponId: appliedCoupon?.id,
+    selectedTimeSlotId,
+    selectedTimeSlotLabel: selectedSlotObj ? `${selectedSlotObj.name} (${selectedSlotObj.timeDisplay})` : undefined,
+    grandTotalBase,
+    grandTotalConverted,
+    currencyCode: selectedCurrency.code,
+    exchangeRate: rate,
+    deliveryChargeBase,
+    totalFeesBase,
+    timeSlotChargeBase,
+    merchantTxnId: refId,
+    createdAt: new Date().toISOString(),
+  });
+
   const activeGateway = (state.paymentGateways || []).find(g => g.id === paymentMethod);
 
   // Apply Coupon triggered
@@ -344,7 +371,19 @@ export default function CartDrawer({
       return;
     }
 
-    const hasApiCredentials = !!(activeGw?.secretKey?.trim() && activeGw?.isEnabled);
+    const hasApiCredentials = (() => {
+      if (!activeGw?.isEnabled) return false;
+      if (paymentMethod === 'nps') {
+        return !!(
+          activeGw.merchantId?.trim() &&
+          activeGw.secretKey?.trim() &&
+          activeGw.extraSettings?.merchantName?.trim() &&
+          activeGw.extraSettings?.apiUsername?.trim() &&
+          activeGw.extraSettings?.apiPassword?.trim()
+        );
+      }
+      return !!activeGw.secretKey?.trim();
+    })();
 
     // Khalti KPG-2 — must redirect to official Khalti portal (MPIN/OTP on Khalti site)
     if (paymentMethod === 'khalti') {
@@ -378,11 +417,24 @@ export default function CartDrawer({
       return;
     }
 
+    // NPS Visa/Mastercard — redirect to hosted secure payment page
+    if (paymentMethod === 'nps') {
+      if (!hasApiCredentials) {
+        alert(
+          'Visa/Mastercard (NPS) is not fully configured. Add Merchant ID, Secret Key, Merchant Name, API Username and API Password in Admin → Settings → Payment Gateways or .env.',
+        );
+        return;
+      }
+      void startNpsRedirect();
+      return;
+    }
+
     setIsRedirectingPayment(true);
   };
 
   const startEsewaRedirect = async () => {
     const tempRefId = `${state.store.orderPrefix || 'KO'}-${Date.now()}`;
+    savePendingRedirectCheckout(buildPendingRedirectPayload(tempRefId, 'esewa'));
     setIsRedirectingPayment(true);
     setIsVerifyingPaymentFlow(true);
     setPaymentVerificationStatus('Redirecting to eSewa…');
@@ -390,8 +442,8 @@ export default function CartDrawer({
       await initiateEsewaCheckout({
         amount: grandTotalConverted,
         transactionUuid: tempRefId,
-        successUrl: `${window.location.origin}/payment/esewa/success?ref=${tempRefId}`,
-        failureUrl: `${window.location.origin}/payment/esewa/failure?ref=${tempRefId}`,
+        successUrl: `${window.location.origin}/payment/esewa/success?ref=${encodeURIComponent(tempRefId)}`,
+        failureUrl: `${window.location.origin}/payment/esewa/failure?ref=${encodeURIComponent(tempRefId)}`,
       });
     } catch (err: unknown) {
       setIsVerifyingPaymentFlow(false);
@@ -400,40 +452,32 @@ export default function CartDrawer({
     }
   };
 
+  const startNpsRedirect = async () => {
+    const tempRefId = `${state.store.orderPrefix || 'KO'}${Date.now()}`;
+    savePendingRedirectCheckout(buildPendingRedirectPayload(tempRefId, 'nps'));
+    setIsRedirectingPayment(true);
+    setIsVerifyingPaymentFlow(true);
+    setPaymentVerificationStatus('Redirecting to secure Visa/Mastercard payment page…');
+    try {
+      const session = await initiateNpsCheckout({
+        amount: grandTotalConverted,
+        merchantTxnId: tempRefId,
+      });
+      redirectToNpsHostedPage(session.gatewayUrl!, session.data!.ProcessId!);
+    } catch (err: unknown) {
+      setIsVerifyingPaymentFlow(false);
+      setIsRedirectingPayment(false);
+      alert(`Card payment error: ${err instanceof Error ? err.message : 'Payment failed'}. Check Admin → Payment Gateways → Test Connection.`);
+    }
+  };
+
   const startKhaltiKpgRedirect = async () => {
     const tempRefId = `${state.store.orderPrefix || 'KO'}-${Date.now()}`;
-    const matchedDist = selectedDistrict;
     setIsRedirectingPayment(true);
     setIsVerifyingPaymentFlow(true);
     setPaymentVerificationStatus('Redirecting to Khalti secure checkout…');
 
-    savePendingKhaltiCheckout({
-      refId: tempRefId,
-      cartItems,
-      senderName: senderName.trim(),
-      senderEmail: senderEmail.trim(),
-      senderPhone: senderPhone.trim(),
-      receiverName: receiverName.trim(),
-      receiverPhone: receiverPhone.trim(),
-      deliveryDistrictId: matchedDist?.id || deliveryDistrictId,
-      deliveryDistrictName: matchedDist?.name || manualDeliveryDistrict.trim(),
-      deliveryAddress: deliveryAddress.trim(),
-      orderNote,
-      preferredDeliveryDate,
-      selectedFeeIds,
-      serviceFeeInputs,
-      appliedCouponId: appliedCoupon?.id,
-      selectedTimeSlotId,
-      selectedTimeSlotLabel: selectedSlotObj ? `${selectedSlotObj.name} (${selectedSlotObj.timeDisplay})` : undefined,
-      grandTotalBase,
-      grandTotalConverted,
-      currencyCode: selectedCurrency.code,
-      exchangeRate: rate,
-      deliveryChargeBase,
-      totalFeesBase,
-      timeSlotChargeBase,
-      createdAt: new Date().toISOString(),
-    });
+    savePendingRedirectCheckout(buildPendingRedirectPayload(tempRefId, 'khalti'));
 
     try {
       await initiateKhaltiCheckout({
@@ -455,7 +499,7 @@ export default function CartDrawer({
     }
   };
 
-  // Settle payment — COD / manual / fonepay / NPS only (Khalti & eSewa use real gateway redirect)
+  // Settle payment — COD / manual / fonepay only (Khalti, eSewa & NPS use official redirect)
   const handleSimulatePaymentCompletion = () => {
     if (
       !paymentMethod ||
@@ -465,73 +509,17 @@ export default function CartDrawer({
       return;
     }
 
-    if (paymentMethod === 'khalti' || paymentMethod === 'esewa') {
+    if (paymentMethod === 'khalti' || paymentMethod === 'esewa' || paymentMethod === 'nps') {
+      const labels: Record<string, string> = {
+        khalti: 'Khalti',
+        esewa: 'eSewa',
+        nps: 'Visa/Mastercard',
+      };
       alert(
-        `${paymentMethod === 'khalti' ? 'Khalti' : 'eSewa'} payments must be completed on the official secure payment page. Click Proceed to Pay to redirect — local PIN fields are not used.`,
+        `${labels[paymentMethod] || 'Online'} payments must be completed on the official secure payment page. Click Proceed to Pay to redirect.`,
       );
       setIsRedirectingPayment(false);
       return;
-    }
-
-    const activeGateway = (state.paymentGateways || []).find(g => g.id === paymentMethod);
-
-    if (paymentMethod === 'nps') {
-      if (!activeGateway || !activeGateway.isEnabled) {
-        alert('NPS Card Gateway is currently disabled in system settings.');
-        return;
-      }
-      if (!activeGateway.merchantId || !activeGateway.secretKey) {
-        alert('NPS Gateway Configuration Error: The Merchant ID and Secret Key must be configured by the Admin in administrative settings to securely verify card handshakes.');
-        return;
-      }
-      
-      const cleanCard = npsCardNumber.replace(/\s+/g, '');
-      if (!cleanCard) {
-        alert('Card Number is required for Visa/Mastercard payments.');
-        return;
-      }
-      if (!/^\d{16}$/.test(cleanCard)) {
-        alert('Invalid Card Number! Card Number must be exactly 16 digits.');
-        return;
-      }
-      if (!npsCardExpiry.trim()) {
-        alert('Card Expiry Date is required.');
-        return;
-      }
-      if (!/^(0[1-9]|1[0-2])\/?([0-9]{2})$/.test(npsCardExpiry.trim())) {
-        alert('Invalid Expiry Date! Use MM/YY format (e.g., 12/28).');
-        return;
-      }
-      
-      const match = npsCardExpiry.trim().match(/^(0[1-9]|1[0-2])\/?([0-9]{2})$/);
-      if (match) {
-        const month = parseInt(match[1]);
-        const year = parseInt('20' + match[2]);
-        const now = new Date();
-        const currentYear = now.getFullYear();
-        const currentMonth = now.getMonth() + 1;
-        if (year < currentYear || (year === currentYear && month < currentMonth)) {
-          alert('This card has already expired. Provide a valid card expiry.');
-          return;
-        }
-      }
-
-      if (!npsCardCvv.trim()) {
-        alert('CVV / Security PIN is required.');
-        return;
-      }
-      if (!/^\d{3,4}$/.test(npsCardCvv.trim())) {
-        alert('CVV must be exactly 3 or 4 digits.');
-        return;
-      }
-      if (!npsCardholderName.trim()) {
-        alert('Cardholder Full Name is required.');
-        return;
-      }
-      if (npsCardholderName.trim().length < 3) {
-        alert('Provide a valid Cardholder Name (minimum 3 characters).');
-        return;
-      }
     }
 
     const products = [...state.products];
@@ -567,87 +555,6 @@ export default function CartDrawer({
       return;
     }
 
-    if (paymentMethod === 'nps') {
-      setIsVerifyingPaymentFlow(true);
-      setPaymentVerificationLog([]);
-      setPaymentVerificationStatus("Configuring secure proxy tunnel...");
-
-      // Generate a highly unique, non-colliding transaction ID using timestamp
-      const tempRefId = `${state.store.orderPrefix || 'KO'}${Date.now()}`;
-
-      const logs: string[] = [];
-      const addLog = (msg: string) => {
-        const time = new Date().toLocaleTimeString();
-        logs.push(`[${time}] ${msg}`);
-        setPaymentVerificationLog([...logs]);
-      };
-
-      addLog("Initializing secure proxy handshake with Nepal Payment Solution...");
-      addLog(`Targeting dynamic merchant context: Merchant ID (${activeGateway?.merchantId || 'N/A'})`);
-      addLog(`Generating alphabetical Sorted Signature: MerchantId, MerchantName, Amount (${grandTotalConverted}), MerchantTxnId (${tempRefId})`);
-
-      fetch('/api/payment/initiate-nps', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          amount: grandTotalConverted,
-          merchantTxnId: tempRefId
-        })
-      })
-      .then(res => {
-        if (!res.ok) {
-          return res.json().then(data => { throw new Error(data.error || 'HTTP ' + res.status); });
-        }
-        return res.json();
-      })
-      .then(data => {
-        // Evaluate API response code (NPS returns 0 for Success, non-zero for Errors)
-        if (data.code !== "0" && data.code !== 0) {
-          const detail = data.errors && data.errors.length > 0
-            ? data.errors.map((e: any) => `${e.error_message} (${e.error_code})`).join(', ')
-            : (data.message || 'Unknown API gateway check error');
-          throw new Error(detail);
-        }
-
-        addLog(`[Success] Securing response from API Gateway: Code (${data.code})`);
-        addLog(`[Success] Response Message: ${data.message}`);
-        if (data.data && data.data.ProcessId) {
-          addLog(`[Success] Process ID retrieved: ${data.data.ProcessId}`);
-        } else {
-          addLog(`[Info] No Process ID returned. Handshake completed.`);
-        }
-        addLog(`Authenticating customer's Visa/Mastercard credentials via NICAsia gateway portal...`);
-        addLog(`Contacting bank issuer secure node for authorization code...`);
-        addLog(`Approved by bank merchant node! Capturing transaction funds...`);
-
-        setTimeout(() => {
-          completeOrderCreation(products, tempRefId, { paymentVerified: true });
-        }, 1550);
-      })
-      .catch(err => {
-        addLog(`[Error] Remote NPS API Handshake failed: ${err.message}`);
-        
-        const isLive = activeGateway?.apiEnvironment === 'live';
-        if (isLive) {
-          addLog(`[Fatal] Settlement rejected. Please try a different payment card or gateway.`);
-          setPaymentVerificationStatus(`Settlement Terminated: ${err.message}`);
-          setIsVerifyingPaymentFlow(false);
-          alert(`NPS Payment Gateway Failure: ${err.message}. Please verify settings or use another card.`);
-        } else {
-          addLog(`[Notice] Offline Sandbox Simulator activated...`);
-          addLog(`[Sim] Checking transaction integrity block with mock token...`);
-          addLog(`[Sim] Handshake successfully authorized! Settle Rs. ${grandTotalConverted}...`);
-
-          setTimeout(() => {
-            completeOrderCreation(products, tempRefId, { paymentVerified: true });
-          }, 1550);
-        }
-      });
-      return;
-    }
-
     completeOrderCreation(products);
   };
 
@@ -657,8 +564,8 @@ export default function CartDrawer({
     options?: { paymentVerified?: boolean },
   ) => {
     const gateway = paymentMethod.toLowerCase();
-    if (['khalti', 'esewa'].includes(gateway) && !options?.paymentVerified) {
-      alert('Online wallet payment was not verified. Order was not created — complete payment on the official Khalti/eSewa page.');
+    if (['khalti', 'esewa', 'nps'].includes(gateway) && !options?.paymentVerified) {
+      alert('Online payment was not verified. Order was not created — complete payment on the official payment page.');
       setIsRedirectingPayment(false);
       setIsVerifyingPaymentFlow(false);
       return;
@@ -975,50 +882,18 @@ export default function CartDrawer({
                 </div>
 
                 {paymentMethod === 'nps' && (
-                  <div className="space-y-3.5 text-xs font-sans">
-                    <div>
-                      <label className="block text-[9.5px] font-bold text-slate-500 uppercase tracking-wide mb-1">Cardholder Full Name</label>
-                      <input
-                        type="text"
-                        placeholder="Dinesh Chalise"
-                        value={npsCardholderName}
-                        onChange={(e) => setNpsCardholderName(e.target.value)}
-                        className="w-full p-2.5 border border-rose-150 rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-rose-500 bg-white text-slate-850"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[9.5px] font-bold text-slate-500 uppercase tracking-wide mb-1">Card Number (Visa / Mastercard)</label>
-                      <input
-                        type="text"
-                        placeholder="4111 2222 3333 4444"
-                        value={npsCardNumber}
-                        onChange={(e) => setNpsCardNumber(e.target.value)}
-                        className="w-full p-2.5 border border-rose-150 rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-rose-500 bg-white text-slate-850 font-mono font-bold"
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-[9.5px] font-bold text-slate-500 uppercase tracking-wide mb-1">Expiry MM/YY</label>
-                        <input
-                          type="text"
-                          placeholder="12/28"
-                          value={npsCardExpiry}
-                          onChange={(e) => setNpsCardExpiry(e.target.value)}
-                          className="w-full p-2.5 border border-rose-150 rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-rose-500 bg-white text-slate-850 font-mono font-bold"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[9.5px] font-bold text-slate-500 uppercase tracking-wide mb-1">CVV Checklist</label>
-                        <input
-                          type="password"
-                          placeholder="•••"
-                          maxLength={4}
-                          value={npsCardCvv}
-                          onChange={(e) => setNpsCardCvv(e.target.value)}
-                          className="w-full p-2.5 border border-rose-150 rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-rose-500 bg-white text-slate-850 font-mono font-bold"
-                        />
-                      </div>
-                    </div>
+                  <div className="rounded-xl border border-rose-100 bg-rose-50/60 p-3 text-xs text-slate-600 leading-relaxed">
+                    You will be redirected to the Nepal Payment Solution (NPS) secure hosted page to enter your Visa or Mastercard details. Card data is never stored on this site.
+                  </div>
+                )}
+
+                {(paymentMethod === 'fonepay_static' || paymentMethod === 'fonepay_dynamic') && activeGateway?.extraSettings?.qrImageUrl && (
+                  <div className="flex justify-center py-2">
+                    <img
+                      src={activeGateway.extraSettings.qrImageUrl}
+                      alt="Fonepay QR"
+                      className="max-w-[180px] rounded-lg border border-rose-100"
+                    />
                   </div>
                 )}
 

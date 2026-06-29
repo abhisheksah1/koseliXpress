@@ -151,7 +151,7 @@ export function createDefaultState(): DatabaseState {
         mappedAccountId: '',
         extraSettings: { fonepayUsername: '', fonepayPassword: '' },
       },
-      { id: 'nps', name: 'Visa Card & Master Card', merchantId: '', secretKey: '', apiEnvironment: 'test', isEnabled: false, mappedAccountId: '', extraSettings: { merchantName: '', apiUsername: '', apiPassword: '' } },
+      { id: 'nps', name: 'Visa Card & Master Card', merchantId: '', secretKey: '', apiEnvironment: 'test', isEnabled: false, priority: 5, mappedAccountId: '', extraSettings: { merchantName: '', apiUsername: '', apiPassword: '' } },
       { id: 'manual', name: 'Manual Bank Transfer / QR Pay', merchantId: 'MANUAL', secretKey: '', apiEnvironment: 'test', isEnabled: false, priority: 6, mappedAccountId: '', extraSettings: { bankName: '', accountName: '', accountNumber: '', branchName: '', instructions: '', qrImageUrl: '' } },
       { id: 'cod', name: 'Cash on Delivery (COD)', logoUrl: '', merchantId: 'COD', secretKey: '', apiEnvironment: 'live', isEnabled: false, priority: 1, mappedAccountId: '', extraSettings: { instructions: 'Pay the delivery rider in cash when your gift arrives.' } },
     ],

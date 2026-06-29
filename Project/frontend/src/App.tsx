@@ -20,12 +20,13 @@ import {
   loadCustomerSession,
   saveCustomerSession,
 } from './utils/customerAuth';
-import { verifyKhaltiPayment } from './utils/paymentHelpers';
+import { verifyKhaltiPayment, verifyEsewaPayment, decodeEsewaCallbackData, checkNpsPaymentStatus } from './utils/paymentHelpers';
 import {
-  clearPendingKhaltiCheckout,
-  finalizeKhaltiCheckoutOrder,
-  loadPendingKhaltiCheckout,
-} from './utils/khaltiCheckout';
+  clearPendingRedirectCheckout,
+  finalizeRedirectCheckoutOrder,
+  loadPendingRedirectCheckout,
+} from './utils/pendingCheckout';
+import { clearPendingKhaltiCheckout, loadPendingKhaltiCheckout } from './utils/khaltiCheckout';
 
 export default function App() {
   const [dbState, setDbState] = useState<DatabaseState | null>(null);
@@ -135,10 +136,11 @@ export default function App() {
             const lookup = await verifyKhaltiPayment(pidx);
             if (lookup.verified) {
               const freshDb = await loadDbState();
-              const pending = loadPendingKhaltiCheckout();
+              const pending = loadPendingKhaltiCheckout() || loadPendingRedirectCheckout();
               if (pending && (!ref || pending.refId === ref)) {
                 const expectedPaisa = Math.round(pending.grandTotalConverted * 100);
                 if (lookup.total_amount !== expectedPaisa) {
+                  clearPendingRedirectCheckout();
                   clearPendingKhaltiCheckout();
                   setToastMessage(
                     `Khalti amount mismatch (expected Rs. ${(expectedPaisa / 100).toFixed(2)}, got Rs. ${(lookup.total_amount / 100).toFixed(2)}). Order was not created.`,
@@ -147,14 +149,14 @@ export default function App() {
                   window.history.replaceState({}, '', '/');
                   return;
                 }
-                const next = finalizeKhaltiCheckoutOrder(freshDb, pending, {
-                  pidx: lookup.pidx,
-                  transaction_id: lookup.transaction_id,
-                  total_amount_paisa: lookup.total_amount,
+                const next = finalizeRedirectCheckoutOrder(freshDb, pending, {
+                  paymentMethod: 'KHALTI',
+                  transactionRef: lookup.transaction_id || lookup.pidx,
                 });
                 saveDbState(next);
                 setDbState(next);
                 setCartItems([]);
+                clearPendingRedirectCheckout();
                 clearPendingKhaltiCheckout();
                 setToastMessage(`Khalti payment confirmed! Order ${pending.refId} is placed.`);
               } else {
@@ -173,9 +175,11 @@ export default function App() {
                   : `Khalti payment status: ${lookup.status}. Order was not completed.`,
               );
               setToastType('info');
+              clearPendingRedirectCheckout();
               clearPendingKhaltiCheckout();
             }
           } else {
+            clearPendingRedirectCheckout();
             clearPendingKhaltiCheckout();
             setToastMessage('Khalti payment could not be verified (missing transaction ID). Your cart is unchanged.');
             setToastType('info');
@@ -189,11 +193,132 @@ export default function App() {
       return;
     }
 
+    if (path.includes('/payment/nps/callback') || path.includes('/payment/nps/success')) {
+      const pendingOnLoad = loadPendingRedirectCheckout();
+      const merchantTxnId =
+        params.get('merchantTxnId') ||
+        params.get('MerchantTxnId') ||
+        params.get('ref') ||
+        ref ||
+        pendingOnLoad?.merchantTxnId ||
+        pendingOnLoad?.refId ||
+        '';
+
+      (async () => {
+        try {
+          if (!merchantTxnId) {
+            throw new Error('Missing transaction reference from NPS return URL.');
+          }
+          const status = await checkNpsPaymentStatus(merchantTxnId);
+          if (status.verified) {
+            const freshDb = await loadDbState();
+            const pending = loadPendingRedirectCheckout();
+            if (pending && (pending.refId === merchantTxnId || pending.merchantTxnId === merchantTxnId)) {
+              const expectedAmount = Number(pending.grandTotalConverted).toFixed(2);
+              const paidAmount = status.data?.Amount ? Number(status.data.Amount).toFixed(2) : expectedAmount;
+              if (paidAmount !== expectedAmount) {
+                clearPendingRedirectCheckout();
+                setToastMessage(
+                  `Card payment amount mismatch (expected Rs. ${expectedAmount}, got Rs. ${paidAmount}). Order was not created.`,
+                );
+                setToastType('info');
+                window.history.replaceState({}, '', '/');
+                return;
+              }
+              const next = finalizeRedirectCheckoutOrder(freshDb, pending, {
+                paymentMethod: 'NPS',
+                transactionRef: merchantTxnId,
+              });
+              saveDbState(next);
+              setDbState(next);
+              setCartItems([]);
+              clearPendingRedirectCheckout();
+              setToastMessage(`Card payment confirmed! Order ${pending.refId} is placed.`);
+            } else {
+              setToastMessage(`Card payment confirmed for order ${merchantTxnId}.`);
+            }
+            setToastType('success');
+          } else {
+            setToastMessage(
+              status.data?.Status
+                ? `Card payment status: ${status.data.Status}. Order was not completed.`
+                : 'Card payment could not be verified. Your cart is unchanged.',
+            );
+            setToastType('info');
+            clearPendingRedirectCheckout();
+          }
+        } catch (err: unknown) {
+          setToastMessage(err instanceof Error ? err.message : 'Card payment verification failed.');
+          setToastType('info');
+        }
+        window.history.replaceState({}, '', '/');
+      })();
+      return;
+    }
+
     if (path.includes('/payment/esewa/success')) {
-      setToastMessage(ref ? `Payment received for order ${ref}. We will confirm shortly.` : 'Payment successful! We will confirm your order shortly.');
-      setToastType('success');
-      window.history.replaceState({}, '', '/');
+      const dataParam = params.get('data');
+      const callbackPayload = dataParam ? decodeEsewaCallbackData(dataParam) : null;
+      const transactionUuid =
+        callbackPayload?.transaction_uuid || ref || params.get('transaction_uuid') || '';
+      const totalAmount =
+        callbackPayload?.total_amount ?? params.get('total_amount') ?? '';
+
+      (async () => {
+        try {
+          if (!transactionUuid || totalAmount === '') {
+            throw new Error('eSewa return URL missing transaction details.');
+          }
+          const verify = await verifyEsewaPayment({
+            transaction_uuid: String(transactionUuid),
+            total_amount: totalAmount,
+            callbackData: callbackPayload || undefined,
+          });
+          if (verify.verified) {
+            const freshDb = await loadDbState();
+            const pending = loadPendingRedirectCheckout();
+            if (pending && (!ref || pending.refId === ref || pending.refId === transactionUuid)) {
+              const expectedAmount = Number(pending.grandTotalConverted).toFixed(2);
+              const paidAmount = Number(verify.total_amount).toFixed(2);
+              if (paidAmount !== expectedAmount) {
+                clearPendingRedirectCheckout();
+                setToastMessage(
+                  `eSewa amount mismatch (expected Rs. ${expectedAmount}, got Rs. ${paidAmount}). Order was not created.`,
+                );
+                setToastType('info');
+                window.history.replaceState({}, '', '/');
+                return;
+              }
+              const next = finalizeRedirectCheckoutOrder(freshDb, pending, {
+                paymentMethod: 'ESEWA',
+                transactionRef: verify.transaction_code || verify.transaction_uuid,
+              });
+              saveDbState(next);
+              setDbState(next);
+              setCartItems([]);
+              clearPendingRedirectCheckout();
+              setToastMessage(`eSewa payment confirmed! Order ${pending.refId} is placed.`);
+            } else {
+              setToastMessage(
+                ref
+                  ? `eSewa payment confirmed for order ${ref}.`
+                  : `eSewa payment confirmed (txn ${verify.transaction_code || verify.transaction_uuid}).`,
+              );
+            }
+            setToastType('success');
+          } else {
+            setToastMessage(`eSewa payment status: ${verify.status}. Order was not completed.`);
+            setToastType('info');
+            clearPendingRedirectCheckout();
+          }
+        } catch (err: unknown) {
+          setToastMessage(err instanceof Error ? err.message : 'eSewa payment verification failed.');
+          setToastType('info');
+        }
+        window.history.replaceState({}, '', '/');
+      })();
     } else if (path.includes('/payment/esewa/failure') || path.includes('/payment/khalti/failure')) {
+      clearPendingRedirectCheckout();
       setToastMessage(ref ? `Payment cancelled or failed for ${ref}. You can retry from your cart.` : 'Payment was cancelled or failed.');
       setToastType('info');
       window.history.replaceState({}, '', '/');
