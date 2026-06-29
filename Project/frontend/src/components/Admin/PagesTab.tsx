@@ -1,7 +1,26 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { DatabaseState, DynamicPage, CustomPageSection, ProductStatus } from '../../types';
-import { Plus, Trash2, ArrowUp, ArrowDown, Settings, Edit3, Save, Sparkles, Navigation, Copy, Building } from 'lucide-react';
+import {
+  Plus, Trash2, ArrowUp, ArrowDown, Save, Sparkles, Navigation, Copy,
+  Layers, Search, Check, ChevronDown, ChevronUp, Eye, Building,
+} from 'lucide-react';
 import SEOAssistantWidget from './SEOAssistantWidget';
+import {
+  AdminInput,
+  AdminTextarea,
+  AdminPrimaryButton,
+  AdminGhostButton,
+  AdminSection,
+  AdminCatalogStyles,
+} from './AdminFormControls';
+import {
+  SECTION_META,
+  BLOCK_CATEGORIES,
+  TEXT_BLOCK_VARIANTS,
+  ACCENT_STYLES,
+  getSectionLabel,
+  getPagePreviewPath,
+} from './pageBuilderConfig';
 
 interface PagesTabProps {
   state: DatabaseState;
@@ -25,6 +44,8 @@ export default function PagesTab({ state, onUpdateState }: PagesTabProps) {
 
   // Success feedback state
   const [saveSuccessMsg, setSaveSuccessMsg] = useState(false);
+  const [pageSearch, setPageSearch] = useState('');
+  const [blockPaletteOpen, setBlockPaletteOpen] = useState(true);
 
   // Navbar Links draft state - normalized and enriched right from start
   const [navDraft, setNavDraft] = useState<any[]>(() => {
@@ -83,6 +104,16 @@ export default function PagesTab({ state, onUpdateState }: PagesTabProps) {
   });
 
   const activePage = state.pages.find(p => p.id === selectedPageId) || state.pages[0];
+
+  const filteredPages = useMemo(() => {
+    const q = pageSearch.trim().toLowerCase();
+    if (!q) return state.pages;
+    return state.pages.filter(
+      (p) =>
+        p.title.toLowerCase().includes(q) ||
+        p.slug.toLowerCase().includes(q)
+    );
+  }, [state.pages, pageSearch]);
 
   useEffect(() => {
     if (state.pages.length === 0) {
@@ -311,6 +342,34 @@ export default function PagesTab({ state, onUpdateState }: PagesTabProps) {
           'https://images.unsplash.com/photo-1526047932273-341f2a7631f9?q=80&w=1200&auto=format&fit=crop'
         ];
         break;
+      case 'trust_strip':
+        (defaultData as any).items = [
+          { icon: 'truck', title: 'Same-Day Delivery', desc: 'Fast delivery across Kathmandu Valley' },
+          { icon: 'gift', title: 'Premium Gifting', desc: 'Handpicked hampers & fresh flowers' },
+          { icon: 'shield', title: 'Secure Checkout', desc: 'Safe payments & order tracking' },
+          { icon: 'heart', title: 'Made with Care', desc: 'Curated gifts for every occasion' },
+        ];
+        break;
+      case 'features':
+        defaultData.title = 'Why Choose Koseli Xpress';
+        defaultData.subtitle = 'OUR PROMISE';
+        (defaultData as any).items = [
+          { emoji: '🎁', title: 'Curated Collections', desc: 'Premium hampers and gifts for every celebration.' },
+          { emoji: '🚚', title: 'Reliable Delivery', desc: 'On-time delivery with real-time order updates.' },
+          { emoji: '💝', title: 'Personal Touch', desc: 'Custom messages and thoughtful presentation.' },
+        ];
+        break;
+      case 'cta_band':
+        defaultData.title = 'Ready to Send Something Special?';
+        defaultData.subtitle = 'Browse our collections and deliver joy anywhere in Nepal.';
+        defaultData.buttonText = 'Shop Now';
+        defaultData.buttonUrl = '/category/gift-hampers';
+        break;
+      case 'button':
+        defaultData.buttonText = 'Explore Collection';
+        defaultData.buttonUrl = '/category/gift-hampers';
+        defaultData.title = '';
+        break;
       case 'footer_builder':
         defaultData.registeredBusinessName = state.complianceFooter?.registeredBusinessName || 'Koseli Xpress Private Limited';
         defaultData.registrationNumber = state.complianceFooter?.registrationNumber || 'Reg No. 283941/079/080';
@@ -443,141 +502,189 @@ export default function PagesTab({ state, onUpdateState }: PagesTabProps) {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h2 className="text-2xl font-semibold text-slate-850">Gifting Touch Page Builder</h2>
-          <p className="text-sm text-slate-500">Edit navigation bars and restructure layout sections for search-optimized web pages.</p>
+    <div className="space-y-5">
+      <AdminCatalogStyles />
+
+      {saveSuccessMsg && (
+        <div className="fixed top-20 right-4 z-50 flex items-center gap-2 px-4 py-3 bg-emerald-600 text-white text-xs font-bold rounded-xl shadow-lg shadow-emerald-900/20 animate-in fade-in slide-in-from-top-2">
+          <Check className="w-4 h-4 shrink-0" />
+          Changes saved successfully
+        </div>
+      )}
+
+      {/* Toolbar */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-5 bg-white border border-pink-100/80 rounded-2xl shadow-sm">
+        <div className="flex items-start gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#E91E63] to-[#C2185B] text-white flex items-center justify-center shrink-0 shadow-md shadow-pink-900/20">
+            <Layers className="w-5 h-5" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#E91E63]">Content Studio</p>
+            <p className="text-sm text-slate-500 mt-0.5">Build storefront pages, manage SEO, and configure navigation.</p>
+          </div>
         </div>
 
-        <div className="flex gap-2 p-1 bg-slate-100 rounded-lg">
+        <div className="flex gap-1.5 p-1 bg-slate-100 rounded-xl shrink-0">
           <button
+            type="button"
             onClick={() => setActiveMenu('pages')}
-            className={`px-3.5 py-1.5 text-xs font-semibold rounded-md transition ${activeMenu === 'pages' ? 'bg-white text-slate-800 shadow-xs' : 'text-slate-500'}`}
+            className={`px-4 py-2 text-xs font-bold rounded-lg transition ${
+              activeMenu === 'pages'
+                ? 'bg-white text-slate-800 shadow-sm'
+                : 'text-slate-500 hover:text-slate-700'
+            }`}
           >
-            Visual Pages
+            <Layers className="w-3.5 h-3.5 inline mr-1.5 -mt-0.5" />
+            Pages
           </button>
           <button
+            type="button"
             onClick={() => setActiveMenu('navbar')}
-            className={`px-3.5 py-1.5 text-xs font-semibold rounded-md transition ${activeMenu === 'navbar' ? 'bg-white text-slate-800 shadow-xs' : 'text-slate-500'}`}
+            className={`px-4 py-2 text-xs font-bold rounded-lg transition ${
+              activeMenu === 'navbar'
+                ? 'bg-white text-slate-800 shadow-sm'
+                : 'text-slate-500 hover:text-slate-700'
+            }`}
           >
-            <Navigation className="w-4 h-4 inline mr-1" /> Dynamic Navbar
+            <Navigation className="w-3.5 h-3.5 inline mr-1.5 -mt-0.5" />
+            Navigation
           </button>
         </div>
       </div>
 
       {activeMenu === 'pages' ? (
-        <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
-          {/* Selector list & SEO perspective */}
-          <div className="xl:col-span-1 space-y-4">
-            <div className="p-4 bg-white border border-slate-100 rounded-xl space-y-3.5">
-              <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 block">Choose Active Page</span>
-              <div className="space-y-2">
-                {state.pages.map(p => {
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-5">
+          {/* Page list & SEO sidebar */}
+          <div className="xl:col-span-3 space-y-4">
+            <AdminSection title="Your Pages" subtitle="Select a page to edit its layout and SEO.">
+              <div className="relative mb-3">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                  type="text"
+                  value={pageSearch}
+                  onChange={(e) => setPageSearch(e.target.value)}
+                  placeholder="Search pages…"
+                  className="w-full pl-9 pr-3 py-2 text-xs font-medium bg-white border border-pink-100 rounded-xl focus:outline-none focus:border-[#E91E63]/40 focus:ring-2 focus:ring-[#E91E63]/15"
+                />
+              </div>
+
+              <div className="space-y-2 max-h-[280px] overflow-y-auto admin-sidebar-scroll pr-1">
+                {filteredPages.map((p) => {
                   const isActive = selectedPageId === p.id;
                   return (
                     <div
                       key={p.id}
-                      className={`group w-full rounded-xl transition border flex flex-col p-3 relative ${isActive ? 'bg-rose-50/50 border-rose-250 text-rose-900 shadow-2xs' : 'bg-white border-slate-100 text-slate-705 hover:bg-slate-50/60'}`}
+                      className={`group rounded-xl border transition-all ${
+                        isActive
+                          ? 'bg-gradient-to-br from-rose-50 to-pink-50/50 border-[#E91E63]/30 shadow-sm ring-1 ring-[#E91E63]/10'
+                          : 'bg-white border-slate-100 hover:border-pink-200 hover:bg-pink-50/30'
+                      }`}
                     >
-                      <div className="flex justify-between items-start gap-1.5 w-full">
-                        <button
-                          onClick={() => {
-                            setSelectedPageId(p.id);
-                            setEditingSectionId(null);
-                          }}
-                          className="flex-1 text-left text-xs font-bold truncate focus:outline-hidden text-slate-800 hover:text-rose-600 transition"
-                        >
-                          {p.title}
-                        </button>
-                        <span className={`text-[8px] font-mono leading-none tracking-widest uppercase px-1.5 py-1 rounded font-extrabold shrink-0 ${p.status === 'active' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-105 text-amber-800'}`}>
-                          {p.status || 'draft'}
-                        </span>
-                      </div>
-                      
-                      <div className="flex justify-between items-center mt-2.5 w-full gap-2 border-t border-dashed border-slate-100 pt-2">
-                        <span className="text-[9px] font-mono text-slate-400 truncate">/{p.slug}</span>
-                        <div className="flex items-center gap-1 shrink-0 opacity-80 group-hover:opacity-100 transition">
-                          <button
-                            onClick={() => handleDuplicatePage(p)}
-                            title="Duplicate Page Design"
-                            className="p-1 hover:bg-rose-100/50 rounded text-slate-500 hover:text-rose-650 transition cursor-pointer"
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedPageId(p.id);
+                          setEditingSectionId(null);
+                        }}
+                        className="w-full text-left p-3 focus:outline-none"
+                      >
+                        <div className="flex justify-between items-start gap-2">
+                          <span className={`text-xs font-bold truncate ${isActive ? 'text-[#E91E63]' : 'text-slate-800'}`}>
+                            {p.title}
+                          </span>
+                          <span
+                            className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 ${
+                              p.status === 'active'
+                                ? 'bg-emerald-100 text-emerald-700'
+                                : 'bg-amber-100 text-amber-700'
+                            }`}
                           >
-                            <Copy className="w-3.5 h-3.5" />
-                          </button>
-                          {state.pages.length > 1 && (
-                            <button
-                              onClick={() => handleDeletePage(p.id)}
-                              title="Delete Page Permanent"
-                              className="p-1 hover:bg-rose-100/50 rounded text-slate-400 hover:text-rose-650 transition cursor-pointer"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
+                            {p.status === 'active' ? 'Live' : 'Draft'}
+                          </span>
                         </div>
+                        <p className="text-[10px] font-mono text-slate-400 mt-1 truncate">/{p.slug}</p>
+                        <p className="text-[10px] text-slate-400 mt-1">{p.sections.length} section{p.sections.length !== 1 ? 's' : ''}</p>
+                      </button>
+                      <div className="flex items-center justify-end gap-1 px-2 pb-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          type="button"
+                          onClick={() => handleDuplicatePage(p)}
+                          title="Duplicate page"
+                          className="p-1.5 rounded-lg hover:bg-white text-slate-500 hover:text-[#E91E63] transition"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                        </button>
+                        {state.pages.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeletePage(p.id)}
+                            title="Delete page"
+                            className="p-1.5 rounded-lg hover:bg-white text-slate-400 hover:text-rose-600 transition"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   );
                 })}
+                {filteredPages.length === 0 && (
+                  <p className="text-xs text-slate-400 text-center py-4">No pages match your search.</p>
+                )}
               </div>
-              <button
-                onClick={handleCreateNewPage}
-                className="w-full text-center py-2.5 border border-slate-200 border-dashed rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-700 hover:border-slate-350 transition cursor-pointer"
-              >
-                + Add Custom Web Page
-              </button>
-            </div>
 
-            {/* SEO metadata form */}
+              <button
+                type="button"
+                onClick={handleCreateNewPage}
+                className="w-full mt-3 py-2.5 border-2 border-dashed border-pink-200 rounded-xl text-xs font-bold text-[#E91E63] hover:bg-pink-50/50 hover:border-[#E91E63]/40 transition"
+              >
+                <Plus className="w-3.5 h-3.5 inline mr-1 -mt-0.5" />
+                New Page
+              </button>
+            </AdminSection>
+
             {activePage && (
-              <div className="p-4 bg-rose-50/50 border border-pink-100 rounded-xl space-y-3.5">
-                <div className="flex justify-between items-center">
-                  <span className="text-[10px] uppercase font-extrabold tracking-wider text-rose-850">SEO Web tags</span>
+              <AdminSection
+                title="SEO Settings"
+                subtitle="Optimize how this page appears in search results."
+              >
+                <div className="flex justify-end mb-3">
                   <button
+                    type="button"
                     onClick={handleAutoSEO}
                     disabled={aiGenerating}
-                    className="p-1 px-2 text-[9px] bg-rose-600 rounded text-white font-semibold flex items-center gap-1 cursor-pointer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider bg-gradient-to-r from-[#E91E63] to-[#C2185B] text-white rounded-lg shadow-sm disabled:opacity-50 transition"
                   >
-                    {aiGenerating ? '...' : <><Sparkles className="w-2.5 h-2.5" /> AI SEO</>}
+                    <Sparkles className="w-3 h-3" />
+                    {aiGenerating ? 'Generating…' : 'AI SEO'}
                   </button>
                 </div>
-
-                <div className="space-y-2 text-xs">
-                  <div>
-                    <label className="block text-[9px] font-bold text-slate-400 uppercase">URL Slug / Path</label>
-                    <input
-                      type="text"
-                      className="w-full p-2 bg-white border rounded text-xs font-mono text-slate-800"
-                      value={activePage.slug || ''}
-                      onChange={(e) => {
-                        const val = e.target.value.toLowerCase().replace(/[^a-z0-9-_]/g, '-');
-                        handleUpdatePageFields({ slug: val });
-                      }}
-                      placeholder="e.g. customized-hampers"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[9px] font-bold text-slate-400 uppercase">Search Page Title</label>
-                    <input
-                      type="text"
-                      className="w-full p-2 bg-white border rounded text-xs font-mono"
-                      value={activePage.metaTitle || ''}
-                      onChange={(e) => handleUpdatePageFields({ metaTitle: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[9px] font-bold text-slate-400 uppercase">Search Summary Description</label>
-                    <textarea
-                      rows={3}
-                      className="w-full p-2 bg-white border rounded text-xs font-mono"
-                      value={activePage.metaDescription || ''}
-                      onChange={(e) => handleUpdatePageFields({ metaDescription: e.target.value })}
-                    />
-                  </div>
+                <div className="space-y-3">
+                  <AdminInput
+                    label="URL Slug"
+                    mono
+                    value={activePage.slug || ''}
+                    onChange={(e) => {
+                      const val = e.target.value.toLowerCase().replace(/[^a-z0-9-_]/g, '-');
+                      handleUpdatePageFields({ slug: val });
+                    }}
+                    placeholder="e.g. anniversary-hampers"
+                  />
+                  <AdminInput
+                    label="Meta Title"
+                    value={activePage.metaTitle || ''}
+                    onChange={(e) => handleUpdatePageFields({ metaTitle: e.target.value })}
+                  />
+                  <AdminTextarea
+                    label="Meta Description"
+                    rows={3}
+                    value={activePage.metaDescription || ''}
+                    onChange={(e) => handleUpdatePageFields({ metaDescription: e.target.value })}
+                  />
                 </div>
-              </div>
+              </AdminSection>
             )}
-            
+
             {activePage && (
               <SEOAssistantWidget
                 type="page"
@@ -588,72 +695,158 @@ export default function PagesTab({ state, onUpdateState }: PagesTabProps) {
             )}
           </div>
 
-          {/* Core Visual Page Builder Nodes */}
-          <div className="xl:col-span-3 space-y-4">
+          {/* Section canvas */}
+          <div className="xl:col-span-9 space-y-4">
             {activePage ? (
-              <div className="space-y-4 bg-white p-5 border border-slate-100 rounded-xl">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="font-bold text-slate-800 text-lg">Section Layout Assembler ("</h3>
-                      <input
-                        type="text"
-                        className="text-lg font-bold text-slate-850 bg-transparent border-b border-dashed border-slate-300 hover:border-slate-500 focus:border-rose-500 focus:outline-hidden py-0 px-1 w-64 focus:ring-0"
-                        value={activePage.title}
-                        onChange={(e) => handleUpdatePageFields({ title: e.target.value })}
-                        title="Click to rename page layout"
-                      />
-                      <h3 className="font-bold text-slate-800 text-lg">")</h3>
-                    </div>
-                    <p className="text-xs text-slate-400 mt-0.5">Order, config, or append specific design blocks rendered directly on this page layout.</p>
+              <div className="rounded-2xl border border-pink-100/80 bg-gradient-to-br from-white to-pink-50/20 shadow-sm overflow-hidden">
+                {/* Canvas header */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 border-b border-pink-100/60 bg-white/80">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400 mb-1">Editing page</p>
+                    <input
+                      type="text"
+                      className="text-lg font-bold text-slate-900 bg-transparent border-b-2 border-dashed border-slate-200 hover:border-[#E91E63]/40 focus:border-[#E91E63] focus:outline-none py-0.5 px-0 w-full max-w-md transition"
+                      value={activePage.title}
+                      onChange={(e) => handleUpdatePageFields({ title: e.target.value })}
+                      title="Click to rename page"
+                    />
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      {activePage.sections.length} block{activePage.sections.length !== 1 ? 's' : ''} · /{activePage.slug}
+                    </p>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={handleSaveActivePage}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-extrabold uppercase tracking-wider transition cursor-pointer shadow-xs"
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    <AdminGhostButton
+                      onClick={() => window.open(getPagePreviewPath(activePage.slug), '_blank')}
+                      className="!py-2"
                     >
+                      <Eye className="w-3.5 h-3.5" />
+                      Preview
+                    </AdminGhostButton>
+                    <AdminPrimaryButton onClick={handleSaveActivePage} className="!py-2">
                       <Save className="w-3.5 h-3.5" />
-                      Save Page Now
-                    </button>
-                    <div className="flex items-center gap-2 bg-slate-50 border p-1 rounded-xl">
-                      <span className="text-[9px] uppercase font-bold tracking-wider text-slate-400 pl-2">Publish Status:</span>
-                      <div className="flex items-center gap-1">
+                      Save Page
+                    </AdminPrimaryButton>
+                    <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl">
                       <button
+                        type="button"
                         onClick={() => handleUpdatePageFields({ status: 'active' })}
-                        className={`text-[10px] px-2.5 py-1 font-bold rounded-lg transition duration-150 cursor-pointer ${activePage.status === 'active' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-500 hover:bg-slate-155'}`}
+                        className={`text-[10px] px-3 py-1.5 font-bold rounded-lg transition ${
+                          activePage.status === 'active'
+                            ? 'bg-emerald-600 text-white shadow-sm'
+                            : 'text-slate-500 hover:bg-white'
+                        }`}
                       >
-                        🟢 Active
+                        Live
                       </button>
                       <button
+                        type="button"
                         onClick={() => handleUpdatePageFields({ status: 'draft' })}
-                        className={`text-[10px] px-2.5 py-1 font-bold rounded-lg transition duration-150 cursor-pointer ${activePage.status !== 'active' ? 'bg-amber-500 text-white shadow-xs' : 'text-slate-500 hover:bg-slate-155'}`}
+                        className={`text-[10px] px-3 py-1.5 font-bold rounded-lg transition ${
+                          activePage.status !== 'active'
+                            ? 'bg-amber-500 text-white shadow-sm'
+                            : 'text-slate-500 hover:bg-white'
+                        }`}
                       >
-                        🟡 Draft
+                        Draft
                       </button>
-                      </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Section blocks listing */}
-                <div className="space-y-3.5">
+                {/* Section blocks */}
+                <div className="p-5 space-y-3">
                   {activePage.sections.length === 0 ? (
-                    <div className="py-12 border-2 border-dashed rounded-xl border-slate-200 text-center text-slate-400 font-medium">
-                      This page layout is empty. Use block selectors below to append layers.
+                    <div className="py-16 px-6 border-2 border-dashed border-pink-200 rounded-2xl text-center bg-pink-50/30">
+                      <div className="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-br from-[#E91E63]/10 to-pink-100 flex items-center justify-center mb-4">
+                        <Layers className="w-7 h-7 text-[#E91E63]" />
+                      </div>
+                      <p className="text-sm font-bold text-slate-700">This page is empty</p>
+                      <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                        Add your first content block from the palette below to start building this page.
+                      </p>
                     </div>
                   ) : (
-                    activePage.sections.map((sec, idx) => (
-                      <div key={sec.id} className="p-4 border rounded-xl bg-slate-50 hover:shadow-xs transition flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
-                        <div className="space-y-1 flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="p-1 px-2.5 bg-rose-100 text-rose-700 rounded text-[9px] uppercase font-extrabold tracking-widest">{sec.type}</span>
-                            <span className="text-xs font-bold text-slate-755">{sec.data.title || 'Untitled layout structure'}</span>
+                    activePage.sections.map((sec, idx) => {
+                      const meta = SECTION_META[sec.type];
+                      const Icon = meta?.icon || Layers;
+                      const accent = ACCENT_STYLES[meta?.accent || 'slate'];
+                      const isEditing = editingSectionId === sec.id;
+
+                      return (
+                      <div
+                        key={sec.id}
+                        className={`rounded-2xl border transition-all ${
+                          isEditing
+                            ? 'border-[#E91E63]/40 bg-white shadow-md ring-2 ring-[#E91E63]/10'
+                            : 'border-slate-100 bg-white hover:border-pink-200 hover:shadow-sm'
+                        }`}
+                      >
+                        <div className="flex flex-col md:flex-row gap-3 p-4">
+                          <div className="flex items-start gap-3 flex-1 min-w-0">
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${accent.iconBg}`}>
+                              <Icon className="w-5 h-5" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-[10px] font-bold text-slate-400">#{idx + 1}</span>
+                                <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${accent.bg} ${accent.text}`}>
+                                  {getSectionLabel(sec.type)}
+                                </span>
+                              </div>
+                              <p className="text-sm font-semibold text-slate-800 mt-1 truncate">
+                                {sec.data.title || sec.data.buttonText || 'Untitled block'}
+                              </p>
+                              {!isEditing && (
+                                <p className="text-[11px] text-slate-400 mt-0.5">Click Configure to edit this block</p>
+                              )}
+                            </div>
                           </div>
-                          {editingSectionId === sec.id ? (
-                            /* Subform editor for block parameters */
-                            <div className="p-4 mt-2 bg-white rounded-lg border border-slate-150 grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+
+                          <div className="flex gap-1.5 items-center shrink-0 self-start md:self-center">
+                            <button
+                              type="button"
+                              onClick={() => handleMoveSection(idx, 'up')}
+                              disabled={idx === 0}
+                              className="p-2 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 text-slate-600 disabled:opacity-30 transition"
+                              title="Move up"
+                            >
+                              <ArrowUp className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleMoveSection(idx, 'down')}
+                              disabled={idx === activePage.sections.length - 1}
+                              className="p-2 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 text-slate-600 disabled:opacity-30 transition"
+                              title="Move down"
+                            >
+                              <ArrowDown className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingSectionId(isEditing ? null : sec.id)}
+                              className={`px-3 py-2 text-[10px] font-bold rounded-lg border transition ${
+                                isEditing
+                                  ? 'bg-[#E91E63] text-white border-[#E91E63]'
+                                  : 'bg-white border-slate-200 text-slate-600 hover:border-[#E91E63]/40 hover:text-[#E91E63]'
+                              }`}
+                            >
+                              {isEditing ? 'Close' : 'Configure'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteSection(idx)}
+                              className="p-2 bg-white hover:bg-rose-50 rounded-lg border border-slate-200 text-rose-500 hover:border-rose-200 transition"
+                              title="Remove block"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {isEditing && (
+                          <div className="px-4 pb-4 border-t border-slate-100 pt-4">
+                            <div className="p-4 bg-slate-50/80 rounded-xl border border-slate-100 grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
                               <div>
                                 <label className="block text-[9px] font-bold text-slate-400 mb-0.5 uppercase">Primary Heading Text</label>
                                 <input
@@ -2151,6 +2344,191 @@ export default function PagesTab({ state, onUpdateState }: PagesTabProps) {
                                 </div>
                               )}
 
+                              {sec.type === 'trust_strip' && (
+                                <div className="md:col-span-2 space-y-2">
+                                  <span className="font-bold text-[10px] text-slate-500 uppercase tracking-wider block">Trust strip items</span>
+                                  {((sec.data as any).items || []).map((item: any, itemIdx: number) => (
+                                    <div key={itemIdx} className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-3 bg-white border border-slate-100 rounded-xl">
+                                      <select
+                                        className="p-2 border rounded-lg text-xs"
+                                        value={item.icon || 'gift'}
+                                        onChange={(e) => {
+                                          const sections = [...activePage.sections];
+                                          const items = [...((sections[idx].data as any).items || [])];
+                                          items[itemIdx] = { ...items[itemIdx], icon: e.target.value };
+                                          (sections[idx].data as any).items = items;
+                                          handleUpdatePageFields({ sections });
+                                        }}
+                                      >
+                                        {['truck', 'gift', 'shield', 'heart', 'clock', 'map'].map((ic) => (
+                                          <option key={ic} value={ic}>{ic}</option>
+                                        ))}
+                                      </select>
+                                      <input
+                                        type="text"
+                                        placeholder="Title"
+                                        className="p-2 border rounded-lg text-xs"
+                                        value={item.title || ''}
+                                        onChange={(e) => {
+                                          const sections = [...activePage.sections];
+                                          const items = [...((sections[idx].data as any).items || [])];
+                                          items[itemIdx] = { ...items[itemIdx], title: e.target.value };
+                                          (sections[idx].data as any).items = items;
+                                          handleUpdatePageFields({ sections });
+                                        }}
+                                      />
+                                      <input
+                                        type="text"
+                                        placeholder="Description"
+                                        className="p-2 border rounded-lg text-xs"
+                                        value={item.desc || ''}
+                                        onChange={(e) => {
+                                          const sections = [...activePage.sections];
+                                          const items = [...((sections[idx].data as any).items || [])];
+                                          items[itemIdx] = { ...items[itemIdx], desc: e.target.value };
+                                          (sections[idx].data as any).items = items;
+                                          handleUpdatePageFields({ sections });
+                                        }}
+                                      />
+                                    </div>
+                                  ))}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const sections = [...activePage.sections];
+                                      const items = [...((sections[idx].data as any).items || []), { icon: 'gift', title: 'New benefit', desc: 'Short description' }];
+                                      (sections[idx].data as any).items = items;
+                                      handleUpdatePageFields({ sections });
+                                    }}
+                                    className="text-[10px] font-bold text-[#E91E63] hover:underline"
+                                  >
+                                    + Add trust item
+                                  </button>
+                                </div>
+                              )}
+
+                              {sec.type === 'features' && (
+                                <div className="md:col-span-2 space-y-2">
+                                  <span className="font-bold text-[10px] text-slate-500 uppercase tracking-wider block">Feature cards</span>
+                                  {((sec.data as any).items || []).map((feat: any, featIdx: number) => (
+                                    <div key={featIdx} className="grid grid-cols-1 sm:grid-cols-4 gap-2 p-3 bg-white border border-slate-100 rounded-xl">
+                                      <input
+                                        type="text"
+                                        placeholder="Emoji"
+                                        className="p-2 border rounded-lg text-xs text-center"
+                                        value={feat.emoji || ''}
+                                        onChange={(e) => {
+                                          const sections = [...activePage.sections];
+                                          const items = [...((sections[idx].data as any).items || [])];
+                                          items[featIdx] = { ...items[featIdx], emoji: e.target.value };
+                                          (sections[idx].data as any).items = items;
+                                          handleUpdatePageFields({ sections });
+                                        }}
+                                      />
+                                      <input
+                                        type="text"
+                                        placeholder="Title"
+                                        className="p-2 border rounded-lg text-xs sm:col-span-1"
+                                        value={feat.title || ''}
+                                        onChange={(e) => {
+                                          const sections = [...activePage.sections];
+                                          const items = [...((sections[idx].data as any).items || [])];
+                                          items[featIdx] = { ...items[featIdx], title: e.target.value };
+                                          (sections[idx].data as any).items = items;
+                                          handleUpdatePageFields({ sections });
+                                        }}
+                                      />
+                                      <input
+                                        type="text"
+                                        placeholder="Description"
+                                        className="p-2 border rounded-lg text-xs sm:col-span-2"
+                                        value={feat.desc || ''}
+                                        onChange={(e) => {
+                                          const sections = [...activePage.sections];
+                                          const items = [...((sections[idx].data as any).items || [])];
+                                          items[featIdx] = { ...items[featIdx], desc: e.target.value };
+                                          (sections[idx].data as any).items = items;
+                                          handleUpdatePageFields({ sections });
+                                        }}
+                                      />
+                                    </div>
+                                  ))}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const sections = [...activePage.sections];
+                                      const items = [...((sections[idx].data as any).items || []), { emoji: '✦', title: 'New feature', desc: 'Feature description' }];
+                                      (sections[idx].data as any).items = items;
+                                      handleUpdatePageFields({ sections });
+                                    }}
+                                    className="text-[10px] font-bold text-[#E91E63] hover:underline"
+                                  >
+                                    + Add feature
+                                  </button>
+                                </div>
+                              )}
+
+                              {(sec.type === 'cta_band' || sec.type === 'button') && (
+                                <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                  {sec.type === 'cta_band' && (
+                                    <>
+                                      <div>
+                                        <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">Headline</label>
+                                        <input
+                                          type="text"
+                                          className="w-full p-2 border rounded-lg text-xs"
+                                          value={sec.data.title || ''}
+                                          onChange={(e) => {
+                                            const sections = [...activePage.sections];
+                                            sections[idx].data.title = e.target.value;
+                                            handleUpdatePageFields({ sections });
+                                          }}
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">Subtext</label>
+                                        <input
+                                          type="text"
+                                          className="w-full p-2 border rounded-lg text-xs"
+                                          value={sec.data.subtitle || ''}
+                                          onChange={(e) => {
+                                            const sections = [...activePage.sections];
+                                            sections[idx].data.subtitle = e.target.value;
+                                            handleUpdatePageFields({ sections });
+                                          }}
+                                        />
+                                      </div>
+                                    </>
+                                  )}
+                                  <div>
+                                    <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">Button label</label>
+                                    <input
+                                      type="text"
+                                      className="w-full p-2 border rounded-lg text-xs"
+                                      value={sec.data.buttonText || ''}
+                                      onChange={(e) => {
+                                        const sections = [...activePage.sections];
+                                        sections[idx].data.buttonText = e.target.value;
+                                        handleUpdatePageFields({ sections });
+                                      }}
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">Button URL</label>
+                                    <input
+                                      type="text"
+                                      className="w-full p-2 border rounded-lg text-xs font-mono"
+                                      value={sec.data.buttonUrl || ''}
+                                      onChange={(e) => {
+                                        const sections = [...activePage.sections];
+                                        sections[idx].data.buttonUrl = e.target.value;
+                                        handleUpdatePageFields({ sections });
+                                      }}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+
                               {sec.type === 'footer_builder' && (
                                 <div className="md:col-span-2 text-left space-y-6">
                                   <div className="bg-rose-50/20 border border-rose-100 p-4 rounded-xl space-y-4">
@@ -2443,126 +2821,107 @@ export default function PagesTab({ state, onUpdateState }: PagesTabProps) {
                                 <button
                                   type="button"
                                   onClick={() => setEditingSectionId(null)}
-                                  className="px-3.5 py-1.5 bg-[#E91E63] hover:bg-[#341a5e] text-white rounded-lg font-bold text-xs shadow-md hover:shadow transition"
+                                  className="px-3.5 py-1.5 bg-[#E91E63] hover:bg-[#C2185B] text-white rounded-lg font-bold text-xs shadow-sm transition"
                                 >
-                                  Close Sub-Editor ✓
+                                  Done editing
                                 </button>
                               </div>
                             </div>
-                          ) : (
-                            <p className="text-[10px] text-slate-400">Expand configuration setups to edit properties.</p>
-                          )}
-                        </div>
-
-                        {/* Node triggers */}
-                        <div className="flex gap-1.5 items-center">
-                          <button
-                            onClick={() => handleMoveSection(idx, 'up')}
-                            disabled={idx === 0}
-                            className="p-1 bg-white hover:bg-slate-100 rounded border text-slate-600 disabled:opacity-40"
-                          >
-                            <ArrowUp className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleMoveSection(idx, 'down')}
-                            disabled={idx === activePage.sections.length - 1}
-                            className="p-1 bg-white hover:bg-slate-100 rounded border text-slate-600 disabled:opacity-40"
-                          >
-                            <ArrowDown className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => setEditingSectionId(editingSectionId === sec.id ? null : sec.id)}
-                            className="px-2.5 py-1 text-[10px] bg-white border hover:bg-rose-50 text-slate-600 hover:text-rose-705 font-bold rounded-lg"
-                          >
-                            Config
-                          </button>
-                          <button
-                            onClick={() => handleDeleteSection(idx)}
-                            className="p-1 bg-white hover:bg-rose-50 rounded border text-rose-600"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
+                          </div>
+                        )}
                       </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
 
-                {/* Grid of buttons to append visual nodes */}
-                <div className="border-t border-slate-100 pt-5 space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-[10px] uppercase font-bold tracking-widest text-slate-400 block">Append visual block modules</span>
-                    <span className="text-[9px] text-[#E91E63] font-black uppercase tracking-widest bg-rose-50 px-2 py-0.5 rounded-full">100% SEO Ready</span>
-                  </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 text-xs">
-                    {(['banner', 'slider', 'categories_grid', 'products_grid', 'image_content', 'video', 'faq', 'reviews', 'google_review', 'text', 'code_embed', 'delivery_countdown', 'footer_builder'] as const).map(type => {
-                      if (type === 'text') {
-                        return (
-                          <React.Fragment key={type}>
+                {/* Block palette */}
+                <div className="border-t border-pink-100/60 bg-white/60 p-5">
+                  <button
+                    type="button"
+                    onClick={() => setBlockPaletteOpen(!blockPaletteOpen)}
+                    className="w-full flex items-center justify-between gap-2 mb-3 group"
+                  >
+                    <div className="text-left">
+                      <p className="text-sm font-bold text-slate-800">Add Content Block</p>
+                      <p className="text-[11px] text-slate-500">Choose a block type to append to this page</p>
+                    </div>
+                    {blockPaletteOpen ? (
+                      <ChevronUp className="w-4 h-4 text-slate-400 group-hover:text-[#E91E63] transition" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-slate-400 group-hover:text-[#E91E63] transition" />
+                    )}
+                  </button>
+
+                  {blockPaletteOpen && (
+                    <div className="space-y-5">
+                      {/* Text blocks row */}
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400 mb-2">Text & SEO</p>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                          {TEXT_BLOCK_VARIANTS.map((variant) => (
                             <button
+                              key={variant.size}
                               type="button"
-                              onClick={() => handleAddSection('text', 'h1')}
-                              className="py-2.5 px-2 bg-rose-50/20 border border-rose-200/50 hover:bg-rose-50 hover:border-rose-300 rounded-lg text-left text-[#E91E63] font-bold transition flex flex-col gap-0.5"
+                              onClick={() => handleAddSection('text', variant.size)}
+                              className="p-3 bg-white border border-pink-100 hover:border-[#E91E63]/40 hover:bg-pink-50/50 rounded-xl text-left transition group"
                             >
-                              <span className="text-[10px] font-black">H1 SEO HEADLINE</span>
-                              <span className="text-[8px] text-slate-400 font-mono font-medium tracking-normal">Heading Level 1</span>
+                              <span className="text-xs font-bold text-slate-800 group-hover:text-[#E91E63]">{variant.label}</span>
+                              <span className="block text-[10px] text-slate-400 mt-0.5">{variant.hint}</span>
                             </button>
-                            <button
-                              type="button"
-                              onClick={() => handleAddSection('text', 'h2')}
-                              className="py-2.5 px-2 bg-orange-50/20 border border-orange-200/50 hover:bg-orange-50 hover:border-orange-300 rounded-lg text-left text-orange-700 font-bold transition flex flex-col gap-0.5"
-                            >
-                              <span className="text-[10px] font-black">H2 SEO HEADING</span>
-                              <span className="text-[8px] text-slate-400 font-mono font-medium tracking-normal">Heading Level 2</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleAddSection('text', 'h3')}
-                              className="py-2.5 px-2 bg-teal-50/20 border border-teal-200/50 hover:bg-teal-50 hover:border-teal-300 rounded-lg text-left text-teal-700 font-bold transition flex flex-col gap-0.5"
-                            >
-                              <span className="text-[10px] font-black">H3 SEO SUBHEADING</span>
-                              <span className="text-[8px] text-slate-400 font-mono font-medium tracking-normal">Heading Level 3</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleAddSection('text', 'p')}
-                              className="py-2.5 px-2 bg-indigo-50/20 border border-indigo-200/50 hover:bg-indigo-50 hover:border-indigo-300 rounded-lg text-left text-indigo-700 font-bold transition flex flex-col gap-0.5"
-                            >
-                              <span className="text-[10px] font-black">PARAGRAPH BODY (P)</span>
-                              <span className="text-[8px] text-slate-400 font-mono font-medium tracking-normal">Standard text block</span>
-                            </button>
-                          </React.Fragment>
-                        );
-                      }
-                      return (
-                        <button
-                          key={type}
-                          type="button"
-                          onClick={() => handleAddSection(type)}
-                          className="py-2.5 px-2 bg-slate-50 border hover:bg-rose-50/50 hover:border-rose-220 rounded-lg text-left text-slate-650 hover:text-rose-700 font-semibold transition flex flex-col justify-center"
-                        >
-                          <span>+ {type.replace('_', ' ').toUpperCase()}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {BLOCK_CATEGORIES.map((category) => (
+                        <div key={category.id}>
+                          <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400 mb-2">{category.title}</p>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                            {category.blocks.map((type) => {
+                              const meta = SECTION_META[type];
+                              const Icon = meta.icon;
+                              const accent = ACCENT_STYLES[meta.accent];
+                              return (
+                                <button
+                                  key={type}
+                                  type="button"
+                                  onClick={() => handleAddSection(type)}
+                                  className={`p-3 border rounded-xl text-left transition group hover:shadow-sm ${accent.bg} ${accent.border} hover:border-[#E91E63]/30`}
+                                >
+                                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center mb-2 ${accent.iconBg}`}>
+                                    <Icon className="w-4 h-4" />
+                                  </div>
+                                  <span className={`text-xs font-bold ${accent.text}`}>{meta.label}</span>
+                                  <span className="block text-[10px] text-slate-500 mt-0.5 leading-snug">{meta.description}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             ) : (
-              <div className="py-24 text-center text-slate-400">Loading page assemblies...</div>
+              <div className="py-20 text-center text-slate-400 text-sm">Select or create a page to begin editing.</div>
             )}
           </div>
         </div>
       ) : (
-        /* DYNAMIC NAVBAR MENU MANAGER */
-        <div className="p-5 bg-white border border-slate-100 rounded-xl space-y-6">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4">
-            <div>
-              <h4 className="font-bold text-slate-800 text-base">Store Navigation Headers & Submenus</h4>
-              <p className="text-xs text-slate-500">Configure global menus, submenus, sequences, and category associations visually on one single screen. All changes synchronize immediately across desktop and mobile storefronts.</p>
-            </div>
+        /* Navigation editor */
+        <AdminSection
+          title="Store Navigation"
+          subtitle="Configure header menus, submenus, and link order for desktop and mobile."
+          className="!p-0 overflow-hidden"
+        >
+          <div className="p-5 space-y-5">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-pink-100/60">
+            <p className="text-[11px] text-slate-500 max-w-xl">
+              Menu items with parent set to <strong>Main Menu Bar</strong> appear left-to-right by sequence. Submenus stack vertically under their parent.
+            </p>
             
-            <button
+            <AdminPrimaryButton
               onClick={() => {
                 const autoId = `nav-item-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
                 setNavDraft([...navDraft, {
@@ -2570,34 +2929,18 @@ export default function PagesTab({ state, onUpdateState }: PagesTabProps) {
                   title: 'New Navigation Item',
                   url: '/category/fresh-flowers',
                   type: 'category',
-                  categoryId: 'cat-flowers',
+                  categoryId: state.categories[0]?.id || '',
                   parentMenuId: 'main',
                   sequence: navDraft.length + 1,
                   enabled: true
                 }]);
               }}
-              className="px-4 py-2 hover:bg-slate-800 bg-slate-900 text-white font-bold rounded-lg text-xs transition shrink-0"
+              className="!py-2 shrink-0"
             >
-              + Append New Menu Link
-            </button>
+              <Plus className="w-4 h-4" />
+              Add Menu Link
+            </AdminPrimaryButton>
           </div>
-
-          {/* Guidelines info card to clarify how priority works */}
-          <div className="p-4 bg-slate-50 rounded-xl border border-slate-150 text-xs space-y-2 text-slate-700 text-left">
-            <span className="font-bold text-slate-900 block flex items-center gap-1">💡 Smart Navigation Assembly Guidelines:</span>
-            <ul className="list-disc pl-4 space-y-1 text-slate-600">
-              <li><strong>Left-to-Right Priority</strong>: Top-level menu items (with parent set to <em>Main Menu Bar</em>) are arranged left-to-right based on their <strong>Sequence Priority</strong> number.</li>
-              <li><strong>Top-to-Down Priority</strong>: Submenu items (which you can drop under any top-level parent menu item) are displayed vertically based on their <strong>Sequence Priority</strong>.</li>
-              <li><strong>Publish Category Multiple Times</strong>: Create multiple links pointing to the same Category page but placed at different places (e.g. main menu and standard custom submenus simultaneously!).</li>
-            </ul>
-          </div>
-
-          {/* Success notice banner */}
-          {saveSuccessMsg && (
-            <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold rounded-lg flex items-center gap-2 animate-bounce">
-              <span>✓ Page builder changes saved and synchronized to the customer storefront.</span>
-            </div>
-          )}
 
           <div className="space-y-4">
             {navDraft.map((link, idx) => {
@@ -2605,8 +2948,8 @@ export default function PagesTab({ state, onUpdateState }: PagesTabProps) {
               const parentCandidates = navDraft.filter(candidate => candidate.id !== link.id && (!candidate.parentMenuId || candidate.parentMenuId === 'main'));
 
               return (
-                <div key={link.id || idx} className="bg-slate-55/40 p-4 rounded-xl border border-slate-200/60 shadow-2xs hover:shadow-xs transition space-y-3 text-left">
-                  <div className="flex flex-wrap items-center justify-between gap-2.5 bg-slate-105 px-3 py-1.5 rounded-lg border border-slate-200">
+                <div key={link.id || idx} className="bg-white p-4 rounded-2xl border border-pink-100/80 shadow-sm hover:shadow-md transition space-y-3 text-left">
+                  <div className="flex flex-wrap items-center justify-between gap-2.5 bg-pink-50/50 px-3 py-2 rounded-xl border border-pink-100/60">
                     <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500 font-mono">
                       Menu Link #{idx + 1}
                     </span>
@@ -2799,155 +3142,111 @@ export default function PagesTab({ state, onUpdateState }: PagesTabProps) {
             })}
           </div>
 
-          <div className="flex flex-col sm:flex-row justify-between pt-4 border-t border-slate-105 gap-4">
-            <button
-              onClick={() => {
-                const autoId = `nav-item-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-                setNavDraft([...navDraft, {
-                  id: autoId,
-                  title: 'New Navigation Item',
-                  url: '/category/gift-hampers',
-                  type: 'category',
-                  categoryId: 'cat-hampers',
-                  parentMenuId: 'main',
-                  sequence: navDraft.length + 1,
-                  enabled: true
-                }]);
-              }}
-              className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 font-bold rounded-lg text-slate-700 transition inline-flex items-center justify-center gap-1 text-xs"
-            >
-              <Plus className="w-4 h-4 text-slate-605 inline" /> + Append Menu Link Item
-            </button>
-
-            <button
-              onClick={handleSaveNavbar}
-              className="px-6 py-2.5 hover:bg-rose-700 bg-rose-500 text-white shadow-md font-bold rounded-lg flex items-center justify-center gap-1.5 cursor-pointer transition text-xs"
-            >
-              <Save className="w-4 h-4" /> Save Navigation configuration
-            </button>
+          <div className="flex flex-col sm:flex-row justify-end pt-4 border-t border-pink-100/60 gap-3">
+            <AdminPrimaryButton onClick={handleSaveNavbar} className="!py-2.5">
+              <Save className="w-4 h-4" />
+              Save Navigation
+            </AdminPrimaryButton>
           </div>
-        </div>
+          </div>
+        </AdminSection>
       )}
 
       {/* Dynamic Page Creation modal overlay */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in text-left">
-          <div className="bg-white border rounded-2xl w-full max-w-xl shadow-2xl p-6 relative max-h-[90vh] overflow-y-auto space-y-4">
-            <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="font-bold text-slate-800 text-sm uppercase tracking-wider">Create New Custom Page</h3>
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 text-left">
+          <div className="bg-white border border-pink-100 rounded-2xl w-full max-w-xl shadow-2xl p-6 relative max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b border-pink-100 pb-4 mb-5">
+              <div>
+                <h3 className="font-bold text-slate-800">Create New Page</h3>
+                <p className="text-[11px] text-slate-500 mt-0.5">Add a custom storefront page with SEO metadata.</p>
+              </div>
               <button
                 type="button"
                 onClick={() => setShowCreateModal(false)}
-                className="text-slate-400 hover:text-slate-650 font-bold text-sm"
+                className="w-8 h-8 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 font-bold text-sm transition"
               >
                 ✕
               </button>
             </div>
 
-            <div className="space-y-3.5 text-xs">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Page Name *</label>
-                  <input
-                    type="text"
-                    required
-                    value={newPageTitle}
-                    onChange={(e) => {
-                      const title = e.target.value;
-                      const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-                      setNewPageTitle(title);
-                      setNewPageSlug(slug);
-                      setNewPageMetaTitle(`${title} | Koseli Xpress`);
-                    }}
-                    placeholder="e.g. Anniversary Hampers"
-                    className="w-full p-2 border rounded-md bg-slate-50 font-semibold text-slate-800"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">URL / Slug *</label>
-                  <input
-                    type="text"
-                    required
-                    value={newPageSlug}
-                    onChange={(e) => setNewPageSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '-'))}
-                    placeholder="e.g. anniversary-hampers"
-                    className="w-full p-2 border rounded-md bg-slate-50 font-mono text-[#E91E63] font-bold"
-                  />
-                </div>
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <AdminInput
+                  label="Page Name"
+                  required
+                  value={newPageTitle}
+                  onChange={(e) => {
+                    const title = e.target.value;
+                    const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+                    setNewPageTitle(title);
+                    setNewPageSlug(slug);
+                    setNewPageMetaTitle(`${title} | Koseli Xpress`);
+                  }}
+                  placeholder="e.g. Anniversary Hampers"
+                />
+                <AdminInput
+                  label="URL Slug"
+                  required
+                  mono
+                  value={newPageSlug}
+                  onChange={(e) => setNewPageSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '-'))}
+                  placeholder="e.g. anniversary-hampers"
+                />
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Page Status</label>
-                <div className="flex gap-4 p-1 bg-slate-50 rounded border max-w-xs">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 mb-2">Status</p>
+                <div className="flex gap-1 p-1 bg-slate-100 rounded-xl max-w-xs">
                   <button
                     type="button"
                     onClick={() => setNewPageStatus('active')}
-                    className={`flex-1 text-center py-1 rounded text-[11px] font-bold transition ${newPageStatus === 'active' ? 'bg-rose-600 text-white shadow-xs' : 'text-slate-500'}`}
+                    className={`flex-1 py-2 rounded-lg text-xs font-bold transition ${
+                      newPageStatus === 'active' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-500'
+                    }`}
                   >
-                    Published
+                    Live
                   </button>
                   <button
                     type="button"
                     onClick={() => setNewPageStatus('draft')}
-                    className={`flex-1 text-center py-1 rounded text-[11px] font-bold transition ${newPageStatus === 'draft' ? 'bg-[#E91E63] text-white shadow-xs' : 'text-slate-500'}`}
+                    className={`flex-1 py-2 rounded-lg text-xs font-bold transition ${
+                      newPageStatus === 'draft' ? 'bg-amber-500 text-white shadow-sm' : 'text-slate-500'
+                    }`}
                   >
                     Draft
                   </button>
                 </div>
               </div>
 
-              <div className="border-t pt-2.5">
-                <span className="text-[10px] font-bold text-[#E91E63] uppercase tracking-wider block mb-2 font-mono">Search Engine Optimization (SEO) Metadata</span>
-                <div className="space-y-2.5">
-                  <div>
-                    <label className="block text-[9px] font-semibold text-slate-400 mb-0.5">Meta Title</label>
-                    <input
-                      type="text"
-                      value={newPageMetaTitle}
-                      onChange={(e) => setNewPageMetaTitle(e.target.value)}
-                      placeholder="Anniversary Hampers Delivery in Nepal | Koseli Xpress"
-                      className="w-full p-2 border rounded-md bg-slate-50 font-mono text-slate-700"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[9px] font-semibold text-slate-400 mb-0.5">Meta Description</label>
-                    <textarea
-                      rows={2}
-                      value={newPageMetaDesc}
-                      onChange={(e) => setNewPageMetaDesc(e.target.value)}
-                      placeholder="Send beautiful anniversary gifts and flowers to Nepal."
-                      className="w-full p-2 border rounded-md bg-slate-50 font-mono text-slate-700"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[9px] font-semibold text-slate-400 mb-0.5">SEO Keywords</label>
-                    <input
-                      type="text"
-                      value={newPageKeywords}
-                      onChange={(e) => setNewPageKeywords(e.target.value)}
-                      placeholder="anniversary category, gifts nepal, florists nepal"
-                      className="w-full p-2 border rounded-md bg-slate-50 font-mono text-slate-700"
-                    />
-                  </div>
-                </div>
-              </div>
+              <AdminInput
+                label="Meta Title"
+                value={newPageMetaTitle}
+                onChange={(e) => setNewPageMetaTitle(e.target.value)}
+                placeholder="Anniversary Hampers | Koseli Xpress"
+              />
+              <AdminTextarea
+                label="Meta Description"
+                rows={2}
+                value={newPageMetaDesc}
+                onChange={(e) => setNewPageMetaDesc(e.target.value)}
+                placeholder="Send beautiful anniversary gifts and flowers to Nepal."
+              />
+              <AdminInput
+                label="SEO Keywords"
+                value={newPageKeywords}
+                onChange={(e) => setNewPageKeywords(e.target.value)}
+                placeholder="anniversary gifts, nepal delivery"
+              />
             </div>
 
-            <div className="flex gap-2 justify-end pt-3 border-t">
-              <button
-                type="button"
-                onClick={() => setShowCreateModal(false)}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-lg text-xs font-semibold"
-              >
+            <div className="flex gap-2 justify-end pt-5 mt-5 border-t border-pink-100">
+              <AdminGhostButton onClick={() => setShowCreateModal(false)}>
                 Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveModalPage}
-                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-semibold shadow-xs"
-              >
-                Create Custom Page
-              </button>
+              </AdminGhostButton>
+              <AdminPrimaryButton onClick={handleSaveModalPage}>
+                Create Page
+              </AdminPrimaryButton>
             </div>
           </div>
         </div>

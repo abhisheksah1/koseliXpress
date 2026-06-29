@@ -16,7 +16,14 @@ function envGateway(id: string, defaults: Partial<GatewayConfig>): GatewayConfig
   const merchantId = defaults.merchantId || '';
   const secretKey = defaults.secretKey || '';
   const publicKey = defaults.publicKey || '';
-  const hasCreds = !!(merchantId || secretKey || publicKey || defaults.extraSettings?.fonepayUsername);
+  const hasCreds = !!(
+    merchantId ||
+    secretKey ||
+    publicKey ||
+    defaults.extraSettings?.fonepayUsername ||
+    defaults.extraSettings?.merchantName ||
+    defaults.extraSettings?.apiUsername
+  );
   if (!hasCreds) return null;
   return {
     id,
@@ -64,7 +71,18 @@ export function getEnvGatewayDefaults(): GatewayConfig[] {
       fonepayPassword: process.env.FONEPAY_PASSWORD || '',
     },
   });
-  return [esewa, khalti, fonepayStatic, fonepayDynamic].filter(Boolean) as GatewayConfig[];
+  const nps = envGateway('nps', {
+    merchantId: process.env.NPS_MERCHANT_ID || '',
+    secretKey: process.env.NPS_SECRET_KEY || '',
+    apiEnvironment: process.env.NPS_ENV === 'live' ? 'live' : 'test',
+    isEnabled: process.env.NPS_ENABLED === 'true',
+    extraSettings: {
+      merchantName: process.env.NPS_MERCHANT_NAME || '',
+      apiUsername: process.env.NPS_API_USERNAME || '',
+      apiPassword: process.env.NPS_API_PASSWORD || '',
+    },
+  });
+  return [esewa, khalti, fonepayStatic, fonepayDynamic, nps].filter(Boolean) as GatewayConfig[];
 }
 
 function mergeExtraSettings(existing: Record<string, string> = {}, incoming: Record<string, string> = {}): Record<string, string> {
@@ -129,6 +147,62 @@ export function getEsewaFormUrl(isLive: boolean): string {
   return isLive
     ? 'https://epay.esewa.com.np/api/epay/main/v2/form'
     : 'https://rc-epay.esewa.com.np/api/epay/main/v2/form';
+}
+
+export function getEsewaStatusUrl(isLive: boolean): string {
+  return isLive
+    ? 'https://esewa.com.np/api/epay/transaction/status/'
+    : 'https://rc.esewa.com.np/api/epay/transaction/status/';
+}
+
+export type EsewaVerifyResult = {
+  status: string;
+  transaction_uuid: string;
+  product_code: string;
+  total_amount: string;
+  transaction_code?: string;
+  verified: boolean;
+};
+
+type EsewaStatusResponse = {
+  status?: string;
+  transaction_uuid?: string;
+  product_code?: string;
+  total_amount?: string | number;
+  transaction_code?: string;
+  ref_id?: string;
+};
+
+/** eSewa transaction status API — only status COMPLETE is treated as success */
+export async function verifyEsewaTransaction(params: {
+  transactionUuid: string;
+  totalAmount: number | string;
+  gateway?: GatewayConfig | null;
+}): Promise<EsewaVerifyResult> {
+  const gw = params.gateway || (await getGatewayById('esewa'));
+  if (!gw) throw new Error('eSewa gateway not configured.');
+  const productCode = gw.merchantId || process.env.ESEWA_MERCHANT_CODE || '';
+  if (!productCode) throw new Error('eSewa merchant code missing.');
+  const totalAmount = Number(params.totalAmount).toFixed(2);
+  const transactionUuid = String(params.transactionUuid).trim();
+  if (!transactionUuid) throw new Error('Missing transaction UUID for eSewa verification.');
+
+  const isLive = gw.apiEnvironment === 'live';
+  const url = `${getEsewaStatusUrl(isLive)}?product_code=${encodeURIComponent(productCode)}&total_amount=${encodeURIComponent(totalAmount)}&transaction_uuid=${encodeURIComponent(transactionUuid)}`;
+  const res = await fetch(url);
+  const data = (await res.json()) as EsewaStatusResponse;
+  if (!res.ok) {
+    throw new Error(`eSewa status check failed (${res.status}).`);
+  }
+  const status = String(data.status || '').toUpperCase();
+  return {
+    status: data.status || 'Unknown',
+    transaction_uuid: data.transaction_uuid || transactionUuid,
+    product_code: data.product_code || productCode,
+    total_amount: String(data.total_amount ?? totalAmount),
+    transaction_code: data.transaction_code || data.ref_id,
+    verified: status === 'COMPLETE',
+  };
 }
 
 export function getKhaltiBaseUrl(isLive: boolean): string {
