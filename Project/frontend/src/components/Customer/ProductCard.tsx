@@ -1,6 +1,6 @@
 import React from 'react';
 import { Product, CurrencySettings, DeliveryGroup } from '../../types';
-import { ShoppingBasket, Sparkles } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 import { getProductStock, isProductOutOfStockForCustomer, isProductLowStockForCustomer } from '../../utils/stockUtils';
 
 const fallbackProductImage = 'https://images.unsplash.com/photo-154946?q=80&w=600&auto=format&fit=crop';
@@ -26,7 +26,6 @@ export default function ProductCard({
   selectedCurrency,
   deliveryGroups,
   onViewDetails,
-  onAddToCart,
   allProducts
 }: ProductCardProps) {
   
@@ -142,12 +141,12 @@ export default function ProductCard({
           <button
             onClick={(e) => {
               e.stopPropagation();
-              onAddToCart(product, e);
+              onViewDetails(product.id);
             }}
             className="px-2 py-1.5 bg-[rgba(var(--primary-rgb),0.04)] hover:bg-[var(--primary-theme)] text-[var(--primary-theme)] hover:text-white text-[10px] sm:text-[10.5px] font-black uppercase tracking-wider rounded-lg transition-all duration-200 border border-[rgba(var(--primary-rgb),0.08)] flex items-center gap-1 cursor-pointer font-sans"
           >
-            <ShoppingBasket className="w-3 h-3" />
-            <span>+ Basket</span>
+            <Sparkles className="w-3 h-3" />
+            <span>Details</span>
           </button>
         ) : (
           <span className="text-slate-400 text-[10px] font-bold py-1 px-2 uppercase tracking-wider">Sold Out</span>

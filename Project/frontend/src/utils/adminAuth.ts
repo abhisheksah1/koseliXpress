@@ -4,7 +4,7 @@ const ADMIN_SESSION_KEY = 'koseli_admin_session';
 
 type AdminSessionPayload = {
   email: string;
-  role: Role;
+  role: string;
   savedAt: string;
 };
 

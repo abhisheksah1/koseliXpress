@@ -27,6 +27,11 @@ export function createDefaultState(): DatabaseState {
       [Role.MANAGER]: { orderProcess: true, accounts: false, productEdit: true, purchaseEntry: true, systemSettings: false },
       [Role.STAFF]: { orderProcess: true, accounts: false, productEdit: false, purchaseEntry: false, systemSettings: false },
     },
+    staffRoleCategories: [
+      { id: Role.ADMIN, roleKey: Role.ADMIN, name: 'Admin', description: 'Full system access.', createdAt: new Date().toISOString() },
+      { id: Role.MANAGER, roleKey: Role.MANAGER, name: 'Manager', description: 'Catalog and order management access.', createdAt: new Date().toISOString() },
+      { id: Role.STAFF, roleKey: Role.STAFF, name: 'Staff', description: 'Order operations access.', createdAt: new Date().toISOString() },
+    ],
     categories: [],
     brands: [],
     products: [],

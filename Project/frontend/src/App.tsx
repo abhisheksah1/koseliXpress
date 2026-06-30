@@ -1,6 +1,7 @@
 import React, { useCallback, useState, useEffect } from 'react';
 import { DB_KEY, loadDbState, saveDbState } from './db';
 import { DatabaseState, CurrencySettings, CartItem, Product, ProductStatus } from './types';
+import { createDefaultState } from './defaultState';
 import Header from './components/Customer/Header';
 import Footer from './components/Customer/Footer';
 import ProductCard from './components/Customer/ProductCard';
@@ -27,6 +28,39 @@ import {
   loadPendingRedirectCheckout,
 } from './utils/pendingCheckout';
 import { clearPendingKhaltiCheckout, loadPendingKhaltiCheckout } from './utils/khaltiCheckout';
+
+const fallbackCurrency: CurrencySettings = { code: 'NPR', symbol: 'Rs.', rateToNPR: 1.0, isDefault: true };
+
+function normalizeDatabaseState(rawState: DatabaseState): DatabaseState {
+  const defaults = createDefaultState();
+  const incoming = (rawState || {}) as Partial<DatabaseState>;
+
+  return {
+    ...defaults,
+    ...incoming,
+    users: Array.isArray(incoming.users) ? incoming.users : defaults.users,
+    categories: Array.isArray(incoming.categories) ? incoming.categories : defaults.categories,
+    brands: Array.isArray(incoming.brands) ? incoming.brands : defaults.brands,
+    products: Array.isArray(incoming.products) ? incoming.products : defaults.products,
+    inventoryLogs: Array.isArray(incoming.inventoryLogs) ? incoming.inventoryLogs : defaults.inventoryLogs,
+    reviews: Array.isArray(incoming.reviews) ? incoming.reviews : defaults.reviews,
+    coupons: Array.isArray(incoming.coupons) ? incoming.coupons : defaults.coupons,
+    leads: Array.isArray(incoming.leads) ? incoming.leads : defaults.leads,
+    orders: Array.isArray(incoming.orders) ? incoming.orders : defaults.orders,
+    currencies: Array.isArray(incoming.currencies) && incoming.currencies.length > 0 ? incoming.currencies : defaults.currencies,
+    serviceFees: Array.isArray(incoming.serviceFees) ? incoming.serviceFees : defaults.serviceFees,
+    pages: Array.isArray(incoming.pages) ? incoming.pages : defaults.pages,
+    deliveryDistricts: Array.isArray(incoming.deliveryDistricts) ? incoming.deliveryDistricts : defaults.deliveryDistricts,
+    deliveryGroups: Array.isArray(incoming.deliveryGroups) ? incoming.deliveryGroups : defaults.deliveryGroups,
+    paymentGateways: Array.isArray(incoming.paymentGateways) ? incoming.paymentGateways : defaults.paymentGateways,
+    supportChats: Array.isArray(incoming.supportChats) ? incoming.supportChats : defaults.supportChats,
+    staffRoleCategories: Array.isArray(incoming.staffRoleCategories) && incoming.staffRoleCategories.length > 0 ? incoming.staffRoleCategories : defaults.staffRoleCategories,
+    plugins: { ...defaults.plugins, ...(incoming.plugins || {}) },
+    appearance: { ...defaults.appearance, ...(incoming.appearance || {}) },
+    store: { ...defaults.store, ...(incoming.store || {}) },
+    rolePermissions: incoming.rolePermissions || defaults.rolePermissions,
+  };
+}
 
 export default function App() {
   const [dbState, setDbState] = useState<DatabaseState | null>(null);
@@ -55,13 +89,14 @@ export default function App() {
   const [customerProductPage, setCustomerProductPage] = useState<number>(1);
 
   const applyDatabaseState = useCallback((freshDb: DatabaseState) => {
-    setDbState(freshDb);
+    const normalizedDb = normalizeDatabaseState(freshDb);
+    setDbState(normalizedDb);
     setSelectedCurrency((current) => {
       const preferredCode = current?.code || 'NPR';
       return (
-        freshDb.currencies.find(c => c.code === preferredCode) ||
-        freshDb.currencies.find(c => c.code === 'NPR') ||
-        { code: 'NPR', symbol: 'Rs.', rateToNPR: 1.0, isDefault: true }
+        normalizedDb.currencies.find(c => c.code === preferredCode) ||
+        normalizedDb.currencies.find(c => c.code === 'NPR') ||
+        fallbackCurrency
       );
     });
   }, []);
@@ -69,6 +104,31 @@ export default function App() {
   useEffect(() => {
     setCustomerProductPage(1);
   }, [selectedCategoryFilter, selectedBrandFilter, catalogSearch, catalogSort]);
+
+  const normalizeProductRouteKey = (value?: string) =>
+    (value || '')
+      .trim()
+      .toLowerCase()
+      .replace(/&/g, 'and')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+
+  const findProductForRoute = (productIdOrSlug?: string) => {
+    if (!dbState || !productIdOrSlug) return undefined;
+    const routeKey = normalizeProductRouteKey(decodeURIComponent(productIdOrSlug));
+    const matches = dbState.products.filter((product) => {
+      const productKeys = [
+        product.id,
+        product.slug,
+        product.name,
+        product.metaTitle
+      ].map(normalizeProductRouteKey);
+
+      return product.id === productIdOrSlug || product.slug === productIdOrSlug || productKeys.includes(routeKey);
+    });
+
+    return matches.find(product => product.status === ProductStatus.ACTIVE);
+  };
 
   const applyCustomerRouteFromPath = () => {
     if (isAdminRoute()) return;
@@ -90,12 +150,25 @@ export default function App() {
       const categorySlug = decodeURIComponent(path.replace('category/', ''));
       setSelectedCategoryFilter(categorySlug);
       setSelectedBrandFilter('');
+      setSelectedProductIdDetails(null);
       setCurrentSlug('catalog');
+      return;
+    }
+
+    if (path.startsWith('product/')) {
+      const productSlugOrId = decodeURIComponent(path.replace('product/', ''));
+      const product = findProductForRoute(productSlugOrId);
+      setSelectedCategoryFilter('');
+      setSelectedBrandFilter('');
+      setCatalogSearch('');
+      setCurrentSlug('product');
+      setSelectedProductIdDetails(product?.id || productSlugOrId);
       return;
     }
 
     if (path === 'catalog' || path === 'products') {
       setCurrentSlug('catalog');
+      setSelectedProductIdDetails(null);
       return;
     }
 
@@ -115,6 +188,14 @@ export default function App() {
     window.addEventListener('popstate', onRouteChange);
     return () => window.removeEventListener('popstate', onRouteChange);
   }, []);
+
+  useEffect(() => {
+    if (!dbState || isAdminApp) return;
+    const path = window.location.pathname.replace(/^\/+|\/+$/g, '');
+    if (path.startsWith('product/')) {
+      applyCustomerRouteFromPath();
+    }
+  }, [dbState, isAdminApp]);
 
   // Toast notification states
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -601,7 +682,7 @@ export default function App() {
       let slug = currentSlug;
 
       if (selectedProductIdDetails) {
-        const prod = prev.products?.find(p => p.id === selectedProductIdDetails);
+        const prod = findProductForRoute(selectedProductIdDetails);
         if (prod) {
           pageTitle = `Product: ${prod.name}`;
           slug = `product/${prod.id}`;
@@ -721,7 +802,7 @@ export default function App() {
 
     if (selectedProductIdDetails) {
       // PRODUCT DETAIL VIEW ACTIVE
-      const p = dbState.products.find(prod => prod.id === selectedProductIdDetails);
+      const p = findProductForRoute(selectedProductIdDetails);
       if (p) {
         const pName = p.name;
         const pPrice = p.discountPrice && p.discountPrice > 0 ? p.discountPrice : p.price;
@@ -931,7 +1012,23 @@ export default function App() {
     setDbState(newState);
     saveDbState(newState);
     window.dispatchEvent(new CustomEvent('koseli-store-updated', { detail: newState }));
+<<<<<<< HEAD
     // Payment gateways sync only via Admin → Save (not on every keystroke)
+=======
+    if (isAdminApp) {
+      setToastType('success');
+      setToastMessage('Saved successfully. Admin changes have been updated.');
+    }
+    if (newState.paymentGateways) {
+      fetch('/api/payment/sync-gateways', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ paymentGateways: newState.paymentGateways })
+      }).catch(err => console.error('Failed to sync payment gateways to server:', err));
+    }
+>>>>>>> 64241424c219dbf864b87a567d856d4caf9eba58
     // Automatically synchronize catalog state to keep backend in lock-step
     fetch('/api/integrate/sync-catalog', {
       method: 'POST',
@@ -964,8 +1061,6 @@ export default function App() {
       return;
     }
 
-    const copy = [...cartItems];
-    
     // Calculate total price adjustment from selected variations
     const netPriceAdjustment = selectedVariations
       ? selectedVariations.reduce((sum, vOpt) => sum + vOpt.priceAdjustment, 0)
@@ -982,28 +1077,52 @@ export default function App() {
 
     const activePrice = basePrice + netPriceAdjustment;
 
-    const idx = copy.findIndex(item => 
-      item.productId === product.id && 
-      item.customMessage === customMessage && 
-      item.customImageUrl === customImageUrl &&
-      (item.selectedPrice === undefined || item.selectedPrice === activePrice) &&
-      (item.selectedVariations || []).length === (selectedVariations || []).length &&
-      (item.selectedVariations || []).every((o, i) => selectedVariations && selectedVariations[i] && o.name === selectedVariations[i].name && o.value === selectedVariations[i].value)
-    );
-    if (idx >= 0) {
-      copy[idx].quantity++;
-    } else {
-      copy.push({
-        productId: product.id,
-        quantity: 1,
-        selectedPrice: activePrice,
-        customMessage,
-        customImageUrl,
-        selectedVariations
-      });
-    }
-    setCartItems(copy);
+    setCartItems(prevItems => {
+      const copy = [...prevItems];
+      const idx = copy.findIndex(item => 
+        item.productId === product.id && 
+        item.customMessage === customMessage && 
+        item.customImageUrl === customImageUrl &&
+        (item.selectedPrice === undefined || item.selectedPrice === activePrice) &&
+        (item.selectedVariations || []).length === (selectedVariations || []).length &&
+        (item.selectedVariations || []).every((o, i) => selectedVariations && selectedVariations[i] && o.name === selectedVariations[i].name && o.value === selectedVariations[i].value)
+      );
+      if (idx >= 0) {
+        copy[idx] = { ...copy[idx], quantity: copy[idx].quantity + 1 };
+      } else {
+        copy.push({
+          productId: product.id,
+          quantity: 1,
+          selectedPrice: activePrice,
+          customMessage,
+          customImageUrl,
+          selectedVariations
+        });
+      }
+      return copy;
+    });
     setIsCartOpen(true);
+  };
+
+  const getProductPath = (product: Product) => `/product/${encodeURIComponent(product.slug || product.id)}`;
+
+  const navigateToProductDetails = (productId: string) => {
+    const product = findProductForRoute(productId);
+    setSelectedCategoryFilter('');
+    setSelectedBrandFilter('');
+    setCatalogSearch('');
+    setCurrentSlug('product');
+    setSelectedProductIdDetails(product?.id || productId);
+    setCustomerProductPage(1);
+
+    if (product) {
+      const nextPath = getProductPath(product);
+      if (window.location.pathname !== nextPath) {
+        window.history.pushState({}, '', nextPath);
+      }
+    }
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const navigateToSlug = (slug: string) => {
@@ -1085,7 +1204,7 @@ export default function App() {
 
   // Product listing matching filtration rules
   const catalogProductsBeforeSort = dbState.products.filter(p => {
-    if (p.status === ProductStatus.DELETED) return false;
+    if (p.status !== ProductStatus.ACTIVE) return false;
     const matchesCategory = selectedCategoryFilter 
       ? productMatchesSelectedCategory(p, selectedCategoryFilter)
       : true;
@@ -1603,12 +1722,24 @@ export default function App() {
           ) : (
             /* Primary View Area layout */
             <main className={`flex-grow w-full ${
-              currentSlug === 'home' && activePageConfig && !isCatalogView
+              selectedProductIdDetails
+                ? 'max-w-none px-0 py-0'
+                : currentSlug === 'home' && activePageConfig && !isCatalogView
                 ? 'max-w-none px-0 py-0'
                 : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8'
             }`}>
               
-              {currentSlug === 'blog' || currentSlug.startsWith('blog/') || currentSlug.startsWith('blog-') ? (
+              {selectedProductIdDetails ? (
+                <ProductDetailModal
+                  productId={selectedProductIdDetails}
+                  state={dbState}
+                  onUpdateState={handleUpdateDatabaseState}
+                  selectedCurrency={selectedCurrency}
+                    onClose={() => navigateToSlug('catalog')}
+                    onNavigateProduct={navigateToProductDetails}
+                  onAddToCart={(p, msg, img, vars) => handleAddToCart(p, undefined, msg, img, vars)}
+                />
+              ) : currentSlug === 'blog' || currentSlug.startsWith('blog/') || currentSlug.startsWith('blog-') ? (
                 <BlogViewer 
                   currentSlug={currentSlug}
                   state={dbState}
@@ -1629,7 +1760,7 @@ export default function App() {
                   sections={activePageConfig.sections}
                   state={dbState}
                   selectedCurrency={selectedCurrency}
-                  onViewProductDetails={setSelectedProductIdDetails}
+                    onViewProductDetails={navigateToProductDetails}
                   onAddToCart={(p, e) => handleAddToCart(p, e)}
                   onNavigateToCategory={(catId) => {
                     navigateToCategory(catId);
@@ -1771,7 +1902,7 @@ export default function App() {
                               product={prod}
                               selectedCurrency={selectedCurrency}
                               deliveryGroups={dbState.deliveryGroups}
-                              onViewDetails={setSelectedProductIdDetails}
+                              onViewDetails={navigateToProductDetails}
                               onAddToCart={(p, e) => handleAddToCart(p, e)}
                               allProducts={dbState.products}
                             />
@@ -1845,58 +1976,6 @@ export default function App() {
           {/* DYNAMIC CATEGORY QUICK NAVIGATION BAR ABOVE FOOTER */}
           <div className="border-t border-rose-100/50 bg-[#FFFDFD]/85 py-7 mb-0 shrink-0">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-6">
-              {isCatalogView && (
-                <div id="customer-catalog-products" className="space-y-6 pb-8 border-b border-rose-100/60">
-                  <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 text-left">
-                    <div>
-                      <h2 className="text-2xl sm:text-3xl font-serif italic font-extrabold text-slate-900">
-                        {selectedCategory?.name || 'All Products'}
-                      </h2>
-                      <p className="text-xs font-mono uppercase tracking-widest text-rose-600 mt-1">
-                        {catalogProducts.length} product{catalogProducts.length === 1 ? '' : 's'} found
-                      </p>
-                    </div>
-                    {(selectedCategoryFilter || selectedBrandFilter || catalogSearch) && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedCategoryFilter('');
-                          setSelectedBrandFilter('');
-                          setCatalogSearch('');
-                          navigateToSlug('catalog');
-                        }}
-                        className="self-start sm:self-auto px-4 py-2 text-xs font-bold rounded-xl bg-rose-50 border border-rose-100 text-rose-700 hover:bg-rose-100 transition"
-                      >
-                        View All Products
-                      </button>
-                    )}
-                  </div>
-
-                  {catalogProducts.length > 0 ? (
-                    <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5 text-left">
-                      {paginatedCustomerProducts.map((prod, idx) => (
-                        <ProductCard
-                          key={`visible-catalog-prod-${prod.id || idx}-${idx}`}
-                          product={prod}
-                          selectedCurrency={selectedCurrency}
-                          deliveryGroups={dbState.deliveryGroups}
-                          onViewDetails={setSelectedProductIdDetails}
-                          onAddToCart={(p, e) => handleAddToCart(p, e)}
-                          allProducts={dbState.products}
-                        />
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="rounded-2xl border border-rose-100 bg-white p-10 text-center">
-                      <h3 className="font-serif italic text-lg font-bold text-slate-900">No products found</h3>
-                      <p className="text-xs text-slate-500 mt-1">
-                        No visible products match this category yet.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
-
               {/* Browse Categories */}
               <div className="space-y-4">
                 <div className="flex items-center justify-center gap-2">
@@ -2008,18 +2087,6 @@ export default function App() {
               setCartClickCount(prev => prev + 1);
             }}
           />
-
-          {/* CUSTOMER DETAIL DIALOG MODAL */}
-          {selectedProductIdDetails && (
-            <ProductDetailModal
-              productId={selectedProductIdDetails}
-              state={dbState}
-              onUpdateState={handleUpdateDatabaseState}
-              selectedCurrency={selectedCurrency}
-              onClose={() => setSelectedProductIdDetails(null)}
-              onAddToCart={(p, msg, img, vars) => handleAddToCart(p, undefined, msg, img, vars)}
-            />
-          )}
 
           {/* CART DRAWER CHECKOUT SLIDE-OVER */}
           <CartDrawer

@@ -2,6 +2,7 @@ import React from 'react';
 import { Trash2, Ticket, CheckCircle2, Gift, Minus, Plus } from 'lucide-react';
 import { DatabaseState, CartItem, CurrencySettings } from '../../types';
 import { CheckoutSubheading } from './CheckoutUI';
+import { getProductStock } from '../../utils/stockUtils';
 import {
   getCheckoutPaymentOptions,
   getFirstSelectablePaymentGatewayId,
@@ -130,6 +131,8 @@ export default function CheckoutSummary({
               ? item.selectedPrice 
               : (prod.discountPrice && prod.discountPrice > 0 && prod.discountPrice < prod.price ? prod.discountPrice : prod.price);
             const convertedProdPrice = itemUnitPrice * rate;
+            const availableStock = getProductStock(prod, state.products);
+            const canIncreaseQuantity = prod.allowOrderWhenOutOfStock || item.quantity < availableStock;
 
             return (
               <div key={item.productId + '-' + itemIdx} className="checkout-item-row p-3 space-y-2">
@@ -183,12 +186,13 @@ export default function CheckoutSummary({
                       <span className="px-2 py-1.5 font-mono font-bold text-xs text-slate-800 min-w-[28px] text-center bg-[#FFF8FA]">{item.quantity}</span>
                       <button
                         type="button"
+                        disabled={!canIncreaseQuantity}
                         onClick={() => {
                           const copy = [...cartItems];
                           copy[itemIdx].quantity++;
                           onUpdateCartItems(copy);
                         }}
-                        className="px-2 py-1.5 text-slate-600 hover:bg-pink-50 transition border-0 bg-transparent cursor-pointer flex items-center"
+                        className="px-2 py-1.5 text-slate-600 hover:bg-pink-50 transition border-0 bg-transparent cursor-pointer flex items-center disabled:opacity-35 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                       >
                         <Plus className="w-3 h-3" />
                       </button>
@@ -206,6 +210,11 @@ export default function CheckoutSummary({
                     </button>
                   </div>
                 </div>
+                {!canIncreaseQuantity && !prod.allowOrderWhenOutOfStock && (
+                  <p className="text-[9px] text-amber-600 font-semibold font-mono">
+                    Only {availableStock} available for this gift.
+                  </p>
+                )}
 
                 {/* Card Messages details if custom written */}
                 {(item.customMessage || item.customImageUrl) && (

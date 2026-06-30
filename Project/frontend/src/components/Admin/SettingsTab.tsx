@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { DatabaseState, CurrencySettings, ServiceFee, PluginSettings, StoreSettings, UserRole, Role, DeliveryDistrict, PaymentGateway, DeliveryGroup, RolePermissions, PreferredDeliveryTimeSlotSettings, DeliveryTimeSlot, CustomerAuthConfig } from '../../types';
+import { DatabaseState, CurrencySettings, ServiceFee, PluginSettings, StoreSettings, UserRole, Role, DeliveryDistrict, PaymentGateway, DeliveryGroup, RolePermissions, PreferredDeliveryTimeSlotSettings, DeliveryTimeSlot, CustomerAuthConfig, StaffRoleCategory } from '../../types';
 import { Save, Globe, Shield, CreditCard, Sparkles, UserCheck, Trash2, Sliders, MapPin, Settings, Server, Key, Landmark, CheckSquare, Square, Upload, FileText, Eye, EyeOff, RefreshCw, Building, Clock, ArrowUp, ArrowDown, Mail, Send, History, PlayCircle, CheckCircle2, AlertCircle } from 'lucide-react';
 import { syncPaymentGateways, testPaymentGateway } from '../../utils/paymentHelpers';
 import {
@@ -15,6 +15,28 @@ interface SettingsTabProps {
 
 export default function SettingsTab({ state, onUpdateState }: SettingsTabProps) {
   const [activeSubMenu, setActiveSubMenu] = useState<'store' | 'roles' | 'currencies' | 'fees' | 'plugins' | 'delivery' | 'gateways' | 'branding' | 'compliance' | 'time_slots' | 'users' | 'emails' | 'customer_auth'>('store');
+  const defaultPerms: Record<string, RolePermissions> = {
+    [Role.ADMIN]: { orderProcess: true, accounts: true, productEdit: true, purchaseEntry: true, systemSettings: true },
+    [Role.MANAGER]: { orderProcess: true, accounts: false, productEdit: true, purchaseEntry: true, systemSettings: false },
+    [Role.STAFF]: { orderProcess: true, accounts: false, productEdit: false, purchaseEntry: false, systemSettings: false }
+  };
+  const baseStaffCategories: StaffRoleCategory[] = [
+    { id: Role.ADMIN, roleKey: Role.ADMIN, name: 'Admin', description: 'Full system access.', createdAt: new Date().toISOString() },
+    { id: Role.MANAGER, roleKey: Role.MANAGER, name: 'Manager', description: 'Catalog and order management access.', createdAt: new Date().toISOString() },
+    { id: Role.STAFF, roleKey: Role.STAFF, name: 'Staff', description: 'Order operations access.', createdAt: new Date().toISOString() },
+  ];
+  const staffRoleCategories = [
+    ...baseStaffCategories,
+    ...(state.staffRoleCategories || []).filter(cat => ![Role.ADMIN, Role.MANAGER, Role.STAFF].includes(cat.roleKey as Role))
+  ];
+  const rolePermissions = { ...defaultPerms, ...(state.rolePermissions || {}) };
+  const permissionRows: { key: keyof RolePermissions; label: string; description: string }[] = [
+    { key: 'orderProcess', label: 'Operational Orders Control', description: 'View orders, update delivery details, and manage fulfillment states.' },
+    { key: 'productEdit', label: 'Product, Pages & Marketing Content', description: 'Create/edit products, page builder content, categories, coupons, reviews, blogs, and social marketing.' },
+    { key: 'purchaseEntry', label: 'Procurement Bills & Stock Intake', description: 'Record supplier purchases, view ledger cost metrics, and update inventory counts.' },
+    { key: 'accounts', label: 'Accounts Ledger & Profit-Loss Vaults', description: 'Access bookkeeping pages, cash accounts, treasury balances, and transaction journals.' },
+    { key: 'systemSettings', label: 'System Settings & Staff Credentials', description: 'Edit payment gateways, currency settings, email settings, and staff user credentials.' }
+  ];
 
   // Form states initialized with database states
   const [storeForm, setStoreForm] = useState<StoreSettings>(state.store);
@@ -267,11 +289,14 @@ export default function SettingsTab({ state, onUpdateState }: SettingsTabProps) 
 
   // Staff registry draft states
   const [newStaffEmail, setNewStaffEmail] = useState('');
-  const [newStaffRole, setNewStaffRole] = useState<Role>(Role.STAFF);
+  const [newStaffRole, setNewStaffRole] = useState<string>(Role.STAFF);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [newCategoryDescription, setNewCategoryDescription] = useState('');
+  const [newCategoryTemplate, setNewCategoryTemplate] = useState<string>(Role.STAFF);
 
   // Dynamic staff edit states
   const [editingStaffEmail, setEditingStaffEmail] = useState<string | null>(null);
-  const [editingStaffRole, setEditingStaffRole] = useState<Role>(Role.STAFF);
+  const [editingStaffRole, setEditingStaffRole] = useState<string>(Role.STAFF);
   const [editingStaffNewEmail, setEditingStaffNewEmail] = useState<string>('');
 
   // direct administrative user states
@@ -281,7 +306,7 @@ export default function SettingsTab({ state, onUpdateState }: SettingsTabProps) 
   const [directUserPassword, setDirectUserPassword] = useState('');
   const [directUserPasscode, setDirectUserPasscode] = useState('');
   const [directUserMobile, setDirectUserMobile] = useState('');
-  const [directUserRole, setDirectUserRole] = useState<Role>(Role.STAFF);
+  const [directUserRole, setDirectUserRole] = useState<string>(Role.STAFF);
   const [directUserStatus, setDirectUserStatus] = useState<'active' | 'inactive'>('active');
 
   // Edit user state
@@ -633,14 +658,77 @@ export default function SettingsTab({ state, onUpdateState }: SettingsTabProps) 
     }
   };
 
-  const handleTogglePermission = (role: Role, field: keyof RolePermissions) => {
-    const defaultPerms = {
-      [Role.ADMIN]: { orderProcess: true, accounts: true, productEdit: true, purchaseEntry: true, systemSettings: true },
-      [Role.MANAGER]: { orderProcess: true, accounts: false, productEdit: true, purchaseEntry: true, systemSettings: false },
-      [Role.STAFF]: { orderProcess: true, accounts: false, productEdit: false, purchaseEntry: false, systemSettings: false }
+  const toRoleKey = (label: string) => label.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+
+  const handleCreateStaffCategory = () => {
+    const label = newCategoryName.trim();
+    if (!label) {
+      alert('Please enter a staff category name.');
+      return;
+    }
+
+    const roleKey = toRoleKey(label);
+    if (!roleKey) {
+      alert('Use letters or numbers in the staff category name.');
+      return;
+    }
+
+    if (staffRoleCategories.some(cat => cat.roleKey === roleKey)) {
+      alert('This staff category already exists.');
+      return;
+    }
+
+    const templatePerm = rolePermissions[newCategoryTemplate] || defaultPerms[Role.STAFF];
+    const newCategory: StaffRoleCategory = {
+      id: `role-cat-${Date.now()}`,
+      roleKey,
+      name: label,
+      description: newCategoryDescription.trim(),
+      createdAt: new Date().toISOString()
     };
-    const currentPermissions = state.rolePermissions || defaultPerms;
-    
+
+    onUpdateState({
+      ...state,
+      staffRoleCategories: [...(state.staffRoleCategories || []), newCategory],
+      rolePermissions: {
+        ...rolePermissions,
+        [roleKey]: { ...templatePerm }
+      }
+    });
+
+    setNewCategoryName('');
+    setNewCategoryDescription('');
+    setNewCategoryTemplate(Role.STAFF);
+    alert(`Staff category "${label}" created successfully.`);
+  };
+
+  const handleDeleteStaffCategory = (roleKey: string) => {
+    if ([Role.ADMIN, Role.MANAGER, Role.STAFF].includes(roleKey as Role)) {
+      alert('Default staff categories cannot be deleted.');
+      return;
+    }
+
+    const assignedUsers = state.users.filter(user => user.role === roleKey).length;
+    if (assignedUsers > 0) {
+      alert(`Cannot delete this category because ${assignedUsers} user(s) are assigned to it. Reassign them first.`);
+      return;
+    }
+
+    const updatedPermissions = { ...rolePermissions };
+    delete updatedPermissions[roleKey];
+
+    onUpdateState({
+      ...state,
+      staffRoleCategories: (state.staffRoleCategories || []).filter(cat => cat.roleKey !== roleKey),
+      rolePermissions: updatedPermissions
+    });
+
+    alert('Staff category deleted successfully.');
+  };
+
+  const handleTogglePermission = (role: string, field: keyof RolePermissions) => {
+    const currentPermissions = rolePermissions;
+
     const rolePerm = { 
       orderProcess: true,
       accounts: false,
@@ -1112,11 +1200,11 @@ export default function SettingsTab({ state, onUpdateState }: SettingsTabProps) 
                             <select
                               className="p-1 border rounded bg-white text-xs text-slate-800"
                               value={editingStaffRole}
-                              onChange={(e) => setEditingStaffRole(e.target.value as Role)}
+                              onChange={(e) => setEditingStaffRole(e.target.value)}
                             >
-                              <option value={Role.STAFF}>STAFF</option>
-                              <option value={Role.MANAGER}>MANAGER</option>
-                              <option value={Role.ADMIN}>ADMIN</option>
+                              {staffRoleCategories.map(category => (
+                                <option key={`editing-role-${category.roleKey}`} value={category.roleKey}>{category.name}</option>
+                              ))}
                             </select>
                           ) : (
                             <span className={`inline-block px-2 py-0.5 font-extrabold tracking-wide uppercase rounded text-[9px] ${
@@ -1196,12 +1284,14 @@ export default function SettingsTab({ state, onUpdateState }: SettingsTabProps) 
                 <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Credential Role Permission</label>
                 <select
                   value={newStaffRole}
-                  onChange={(e) => setNewStaffRole(e.target.value as Role)}
+                  onChange={(e) => setNewStaffRole(e.target.value)}
                   className="w-full p-2.5 bg-slate-50 border rounded-lg text-xs"
                 >
-                  <option value={Role.STAFF}>STAFF (View/edit inventory, update status)</option>
-                  <option value={Role.MANAGER}>MANAGER (Edit products, view analysis templates)</option>
-                  <option value={Role.ADMIN}>ADMIN (All settings, plugins, role creation)</option>
+                  {staffRoleCategories.map(category => (
+                    <option key={`new-staff-role-${category.roleKey}`} value={category.roleKey}>
+                      {category.name}{category.description ? ` (${category.description})` : ''}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -1231,69 +1321,101 @@ export default function SettingsTab({ state, onUpdateState }: SettingsTabProps) 
             </div>
           </div>
 
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-3 p-4 bg-slate-50 border border-slate-100 rounded-xl">
+            <div>
+              <label className="block text-[10px] font-extrabold text-slate-400 uppercase mb-1">New Staff Category</label>
+              <input
+                type="text"
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+                placeholder="e.g. Fulfillment Staff"
+                className="w-full p-2.5 bg-white border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-rose-500 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-extrabold text-slate-400 uppercase mb-1">Description</label>
+              <input
+                type="text"
+                value={newCategoryDescription}
+                onChange={(e) => setNewCategoryDescription(e.target.value)}
+                placeholder="What this user category can do"
+                className="w-full p-2.5 bg-white border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-rose-500 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-extrabold text-slate-400 uppercase mb-1">Copy Privileges From</label>
+              <select
+                value={newCategoryTemplate}
+                onChange={(e) => setNewCategoryTemplate(e.target.value)}
+                className="w-full p-2.5 bg-white border border-slate-200 rounded-lg text-xs"
+              >
+                {staffRoleCategories.map(category => (
+                  <option key={`template-${category.roleKey}`} value={category.roleKey}>{category.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-end">
+              <button
+                type="button"
+                onClick={handleCreateStaffCategory}
+                className="w-full py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-lg transition cursor-pointer text-xs"
+              >
+                Create Category
+              </button>
+            </div>
+          </div>
+
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="bg-slate-50/80 border-b border-slate-100">
-                  <th className="p-3.5 py-3 text-[10px] uppercase font-extrabold text-slate-400 w-1/3 tracking-wider">Feature Permission Scope</th>
-                  <th className="p-3.5 py-3 text-[10px] uppercase font-extrabold text-slate-400 text-center w-1/5 tracking-wider">
-                    <span className="block font-bold text-rose-700">ADMIN</span>
-                    <span className="text-[9px] font-mono text-slate-400 font-normal normal-case">
-                      {state.users.filter(u => u.role === Role.ADMIN).length} staff assigned
-                    </span>
-                  </th>
-                  <th className="p-3.5 py-3 text-[10px] uppercase font-extrabold text-slate-400 text-center w-1/5 tracking-wider">
-                    <span className="block font-bold text-blue-700">MANAGER</span>
-                    <span className="text-[9px] font-mono text-slate-400 font-normal normal-case">
-                      {state.users.filter(u => u.role === Role.MANAGER).length} staff assigned
-                    </span>
-                  </th>
-                  <th className="p-3.5 py-3 text-[10px] uppercase font-extrabold text-slate-400 text-center w-1/5 tracking-wider">
-                    <span className="block font-bold text-slate-600">STAFF</span>
-                    <span className="text-[9px] font-mono text-slate-400 font-normal normal-case">
-                      {state.users.filter(u => u.role === Role.STAFF).length} staff assigned
-                    </span>
-                  </th>
+                  <th className="p-3.5 py-3 text-[10px] uppercase font-extrabold text-slate-400 min-w-[260px] tracking-wider">Feature Permission Scope</th>
+                  {staffRoleCategories.map(category => (
+                    <th key={`perm-head-${category.roleKey}`} className="p-3.5 py-3 text-[10px] uppercase font-extrabold text-slate-400 text-center min-w-[150px] tracking-wider">
+                      <span className="block font-bold text-slate-700">{category.name}</span>
+                      <span className="text-[9px] font-mono text-slate-400 font-normal normal-case">
+                        {state.users.filter(u => u.role === category.roleKey).length} user(s)
+                      </span>
+                      {![Role.ADMIN, Role.MANAGER, Role.STAFF].includes(category.roleKey as Role) && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteStaffCategory(category.roleKey)}
+                          className="mt-1 text-[8px] text-rose-600 hover:text-rose-700 underline font-bold"
+                        >
+                          delete
+                        </button>
+                      )}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-650">
-                {[
-                  { key: 'orderProcess', label: '1. Operational Orders Control', description: 'Permits viewing operations backlog, editing delivery details, overriding item backorder flags, changing payment & fulfillment states.' },
-                  { key: 'productEdit', label: '2. Product Catalog, Categories & Status', description: 'Permits drafting, publishing, duplicating and saving product entries, category rules, and brand assignments.' },
-                  { key: 'purchaseEntry', label: '3. Procurement Bills & Stock Intake', description: 'Permits recording supplier purchases, viewing ledger cost metrics, and updating raw inventory counts.' },
-                  { key: 'accounts', label: '4. Accounts Ledger & Profit-Loss Vaults', description: 'Permits accessing bookkeeping pages, cash accounts list, adjusting treasury balances, and auditing transaction journals.' },
-                  { key: 'systemSettings', label: '5. Admin Parameters & Global Gateways', description: 'Permits editing eSewa/Khalti keys, creating new staff users, and changing currencies multipliers.' }
-                ].map((perm) => {
-                  const rowKey = perm.key as keyof RolePermissions;
-                  const defaultPerms = {
-                    [Role.ADMIN]: { orderProcess: true, accounts: true, productEdit: true, purchaseEntry: true, systemSettings: true },
-                    [Role.MANAGER]: { orderProcess: true, accounts: false, productEdit: true, purchaseEntry: true, systemSettings: false },
-                    [Role.STAFF]: { orderProcess: true, accounts: false, productEdit: false, purchaseEntry: false, systemSettings: false }
-                  };
-                  const rolePerms = state.rolePermissions || defaultPerms;
-                  
+                {permissionRows.map((perm, idx) => {
+                  const rowKey = perm.key;
+
                   return (
                     <tr key={perm.key} className="hover:bg-slate-50/50 transition-colors">
                       <td className="p-3.5 py-4">
-                        <span className="font-bold text-slate-800 text-xs block">{perm.label}</span>
+                        <span className="font-bold text-slate-800 text-xs block">{idx + 1}. {perm.label}</span>
                         <span className="text-slate-400 font-medium text-[11px] leading-relaxed block mt-0.5">{perm.description}</span>
                       </td>
                       
-                      {[Role.ADMIN, Role.MANAGER, Role.STAFF].map((r) => {
-                        const isAllowed = !!(rolePerms[r] ? rolePerms[r][rowKey] : defaultPerms[r][rowKey]);
+                      {staffRoleCategories.map((category) => {
+                        const roleKey = category.roleKey;
+                        const isAllowed = !!(rolePermissions[roleKey] ? rolePermissions[roleKey][rowKey] : defaultPerms[Role.STAFF][rowKey]);
                         
                         return (
-                          <td key={r} className="p-3.5 py-4 text-center">
+                          <td key={`${roleKey}-${rowKey}`} className="p-3.5 py-4 text-center">
                             <label className="inline-flex items-center justify-center cursor-pointer select-none">
                               <input
                                   type="checkbox"
                                   checked={isAllowed}
-                                  onChange={() => handleTogglePermission(r, rowKey)}
+                                  onChange={() => handleTogglePermission(roleKey, rowKey)}
                                   className="sr-only peer"
                                 />
                                 <div className={`w-9 h-5 rounded-full transition-colors relative after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all ${
                                   isAllowed 
-                                    ? r === Role.ADMIN ? 'bg-rose-650 after:translate-x-full' : r === Role.MANAGER ? 'bg-indigo-600 after:translate-x-full' : 'bg-slate-700 after:translate-x-full'
+                                    ? roleKey === Role.ADMIN ? 'bg-rose-650 after:translate-x-full' : roleKey === Role.MANAGER ? 'bg-indigo-600 after:translate-x-full' : 'bg-slate-700 after:translate-x-full'
                                     : 'bg-slate-200 peer-checked:bg-rose-600'
                                 }`}></div>
                             </label>
@@ -1491,11 +1613,13 @@ export default function SettingsTab({ state, onUpdateState }: SettingsTabProps) 
                   <select
                     className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs"
                     value={directUserRole}
-                    onChange={(e) => setDirectUserRole(e.target.value as Role)}
+                    onChange={(e) => setDirectUserRole(e.target.value)}
                   >
-                    <option value={Role.STAFF}>STAFF</option>
-                    <option value={Role.MANAGER}>MANAGER</option>
-                    <option value={Role.ADMIN}>SUPER ADMIN</option>
+                    {staffRoleCategories.map(category => (
+                      <option key={`direct-user-role-${category.roleKey}`} value={category.roleKey}>
+                        {category.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div>
@@ -1540,6 +1664,99 @@ export default function SettingsTab({ state, onUpdateState }: SettingsTabProps) 
                 )}
               </div>
             </form>
+          </div>
+        </div>
+
+        <div className="bg-white border border-slate-100 rounded-xl p-5 space-y-4 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-50 pb-3">
+            <div>
+              <h4 className="font-bold text-slate-800 text-sm">Staff Category & Privilege Builder</h4>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Create custom user categories, assign users to them, and customize exactly which admin modules they can access.
+              </p>
+            </div>
+            <span className="text-[10px] font-mono font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2.5 py-1 rounded-full">
+              {staffRoleCategories.length} categories
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <input
+              type="text"
+              value={newCategoryName}
+              onChange={(e) => setNewCategoryName(e.target.value)}
+              placeholder="Category name e.g. Delivery Staff"
+              className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+            />
+            <input
+              type="text"
+              value={newCategoryDescription}
+              onChange={(e) => setNewCategoryDescription(e.target.value)}
+              placeholder="Short description"
+              className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+            />
+            <select
+              value={newCategoryTemplate}
+              onChange={(e) => setNewCategoryTemplate(e.target.value)}
+              className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs"
+            >
+              {staffRoleCategories.map(category => (
+                <option key={`user-template-${category.roleKey}`} value={category.roleKey}>
+                  Copy from {category.name}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={handleCreateStaffCategory}
+              className="py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition cursor-pointer text-xs"
+            >
+              Create User Category
+            </button>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-100">
+                  <th className="p-3 font-extrabold uppercase text-[10px] text-slate-400 min-w-[220px]">Privilege</th>
+                  {staffRoleCategories.map(category => (
+                    <th key={`user-perm-head-${category.roleKey}`} className="p-3 font-extrabold uppercase text-[10px] text-slate-400 text-center min-w-[140px]">
+                      <span className="block text-slate-700">{category.name}</span>
+                      <span className="normal-case font-mono font-semibold text-[9px] text-slate-400">
+                        {state.users.filter(user => user.role === category.roleKey).length} assigned
+                      </span>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {permissionRows.map((perm) => (
+                  <tr key={`user-perm-${perm.key}`}>
+                    <td className="p-3">
+                      <span className="font-bold text-slate-800 block">{perm.label}</span>
+                      <span className="text-[10px] text-slate-400">{perm.description}</span>
+                    </td>
+                    {staffRoleCategories.map(category => {
+                      const isAllowed = !!(rolePermissions[category.roleKey]?.[perm.key]);
+                      return (
+                        <td key={`user-perm-${category.roleKey}-${perm.key}`} className="p-3 text-center">
+                          <button
+                            type="button"
+                            onClick={() => handleTogglePermission(category.roleKey, perm.key)}
+                            className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase transition cursor-pointer ${
+                              isAllowed ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-slate-100 text-slate-400 border border-slate-200'
+                            }`}
+                          >
+                            {isAllowed ? 'Allowed' : 'Denied'}
+                          </button>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>

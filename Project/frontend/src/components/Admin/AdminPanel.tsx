@@ -41,6 +41,7 @@ import {
   UserCircle2,
   Menu,
   X,
+  Save,
 } from 'lucide-react';
 
 type AdminTab = 'dashboard' | 'products' | 'inventory' | 'orders' | 'pages' | 'reviews' | 'coupons' | 'settings' | 'accounting' | 'seo' | 'api_integration' | 'social_marketing' | 'blogs' | 'support_chats';
@@ -208,7 +209,7 @@ export default function AdminPanel({ state, onUpdateState, onExitAdmin }: AdminP
   }
 
   // Dynamic Credentials Role-Based Access Control
-  const defaultPerms = {
+  const defaultPerms: Record<string, RolePermissions> = {
     [Role.ADMIN]: { orderProcess: true, accounts: true, productEdit: true, purchaseEntry: true, systemSettings: true },
     [Role.MANAGER]: { orderProcess: true, accounts: false, productEdit: true, purchaseEntry: true, systemSettings: false },
     [Role.STAFF]: { orderProcess: true, accounts: false, productEdit: false, purchaseEntry: false, systemSettings: false }
@@ -503,6 +504,17 @@ export default function AdminPanel({ state, onUpdateState, onExitAdmin }: AdminP
                 Read-only
               </span>
             )}
+            {!isReadOnlyStaff && (
+              <button
+                type="button"
+                onClick={() => onUpdateState(state)}
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs text-emerald-700 font-bold bg-emerald-50 hover:bg-emerald-100 rounded-xl transition border border-emerald-100"
+                title="Save current admin workspace"
+              >
+                <Save className="w-4 h-4" />
+                <span className="hidden sm:inline">Save Now</span>
+              </button>
+            )}
             <button
               type="button"
               className="w-9 h-9 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-500 flex items-center justify-center transition border border-slate-200/80"
@@ -537,7 +549,7 @@ export default function AdminPanel({ state, onUpdateState, onExitAdmin }: AdminP
               <div className="space-y-2">
                 <h3 className="text-lg font-bold text-slate-900">Workspace Authorization Denied</h3>
                 <p className="text-xs text-slate-500 leading-relaxed font-semibold">
-                  Your current active profile role <span className="font-mono bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded uppercase font-bold text-[10px]">{currentUser.role}</span> does not have the necessary <strong>{reqPerm}</strong> permissions assigned to operate inside this section.
+                  Your current active profile category <span className="font-mono bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded uppercase font-bold text-[10px]">{currentUser.role}</span> does not have the necessary <strong>{reqPerm}</strong> permissions assigned to operate inside this section.
                 </p>
               </div>
               

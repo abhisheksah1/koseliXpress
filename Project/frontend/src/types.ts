@@ -27,7 +27,7 @@ export enum Role {
 
 export interface UserRole {
   email: string;
-  role: Role;
+  role: Role | string;
   invitedAt: string;
   passcode?: string;
   fullName?: string;
@@ -569,6 +569,14 @@ export interface RolePermissions {
   systemSettings: boolean;
 }
 
+export interface StaffRoleCategory {
+  id: string;
+  name: string;
+  description?: string;
+  roleKey: string;
+  createdAt: string;
+}
+
 export interface SpecialDayReminder {
   id: string;
   name: string; // e.g. "Mom's Birthday"
@@ -583,7 +591,8 @@ export interface SpecialDayReminder {
 
 export interface DatabaseState {
   users: UserRole[];
-  rolePermissions?: Record<Role, RolePermissions>;
+  rolePermissions?: Record<string, RolePermissions>;
+  staffRoleCategories?: StaffRoleCategory[];
   categories: Category[];
   brands: Brand[];
   products: Product[];
