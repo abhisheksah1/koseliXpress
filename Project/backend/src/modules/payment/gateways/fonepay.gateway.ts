@@ -12,6 +12,8 @@ import {
 } from '../types/payment.types.js';
 import { generatePaymentId } from '../utils/crypto.util.js';
 import { maskSecret } from '../utils/mask.util.js';
+import { getFonepayGatewayUrl } from '../constants/gateway-urls.js';
+import { isLiveEnvironment } from '../utils/app-url.util.js';
 
 export class FonepayGateway implements PaymentGatewayAdapter {
   readonly gatewayId = 'fonepay';
@@ -24,7 +26,8 @@ export class FonepayGateway implements PaymentGatewayAdapter {
 
   async initializePayment(credentials: GatewayCredentials, input: CreatePaymentDto): Promise<InitializePaymentResult> {
     const qrImageUrl = credentials.extraSettings?.qrImageUrl || process.env.FONEPAY_STATIC_QR_URL || '';
-    const gatewayUrl = process.env.FONEPAY_GATEWAY_URL || '';
+    const isLive = isLiveEnvironment(credentials.environment);
+    const gatewayUrl = getFonepayGatewayUrl(isLive);
 
     return {
       paymentId: generatePaymentId(),

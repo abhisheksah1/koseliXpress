@@ -1,5 +1,10 @@
 import crypto from 'crypto';
 import { getApiStore, saveApiStore } from './apiStoreService.js';
+import {
+  getEsewaFormUrl as resolveEsewaFormUrl,
+  getEsewaStatusBaseUrl,
+  getKhaltiApiBaseUrl,
+} from '../modules/payment/constants/gateway-urls.js';
 
 export interface GatewayConfig {
   id: string;
@@ -149,16 +154,10 @@ export function generateEsewaSignature(amount: string, transactionUuid: string, 
   return crypto.createHmac('sha256', secretKey).update(dataString).digest('base64');
 }
 
-export function getEsewaFormUrl(isLive: boolean): string {
-  return isLive
-    ? 'https://epay.esewa.com.np/api/epay/main/v2/form'
-    : 'https://rc-epay.esewa.com.np/api/epay/main/v2/form';
-}
+export { resolveEsewaFormUrl as getEsewaFormUrl };
 
 export function getEsewaStatusUrl(isLive: boolean): string {
-  return isLive
-    ? 'https://esewa.com.np/api/epay/transaction/status/'
-    : 'https://rc.esewa.com.np/api/epay/transaction/status/';
+  return getEsewaStatusBaseUrl(isLive);
 }
 
 export type EsewaVerifyResult = {
@@ -212,7 +211,7 @@ export async function verifyEsewaTransaction(params: {
 }
 
 export function getKhaltiBaseUrl(isLive: boolean): string {
-  return isLive ? 'https://khalti.com/api/v2' : 'https://dev.khalti.com/api/v2';
+  return getKhaltiApiBaseUrl(isLive);
 }
 
 export function getKhaltiInitiateUrl(isLive: boolean): string {
@@ -284,7 +283,7 @@ export async function testEsewaConnection(gw: GatewayConfig): Promise<{ ok: bool
     return {
       ok: true,
       message: `eSewa credentials valid. Signature generated for sandbox/live (${gw.apiEnvironment}).`,
-      details: { productCode, signaturePreview: maskSecret(signature), formUrl: getEsewaFormUrl(gw.apiEnvironment === 'live') },
+      details: { productCode, signaturePreview: maskSecret(signature), formUrl: resolveEsewaFormUrl(gw.apiEnvironment === 'live') },
     };
   } catch (err: unknown) {
     return { ok: false, message: err instanceof Error ? err.message : 'eSewa signature generation failed.' };

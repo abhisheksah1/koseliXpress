@@ -12,6 +12,7 @@ import {
 } from '../types/payment.types.js';
 import { calculateNpsSignature, generatePaymentId } from '../utils/crypto.util.js';
 import { maskSecret } from '../utils/mask.util.js';
+import { getNpsApiUrl, getNpsHostedUrl } from '../constants/gateway-urls.js';
 import { getPaymentCallbackUrl, isLiveEnvironment } from '../utils/app-url.util.js';
 import crypto from 'crypto';
 
@@ -48,14 +49,6 @@ export class CardGateway implements PaymentGatewayAdapter {
     return provider === 'stripe' ? 'stripe' : 'nps';
   }
 
-  private npsApiUrl(isLive: boolean, path: string): string {
-    return isLive ? `https://api.nepalpayment.com/${path}` : `https://apisandbox.nepalpayment.com/${path}`;
-  }
-
-  private npsHostedUrl(isLive: boolean): string {
-    return isLive ? 'https://gateway.nepalpayment.com/Payment/Index' : 'https://gatewaysandbox.nepalpayment.com/Payment/Index';
-  }
-
   async initializePayment(credentials: GatewayCredentials, input: CreatePaymentDto): Promise<InitializePaymentResult> {
     if (this.provider() === 'stripe') {
       return this.initializeStripe(credentials, input);
@@ -83,7 +76,7 @@ export class CardGateway implements PaymentGatewayAdapter {
     const signature = calculateNpsSignature(payload, credentials.secretKey);
     const basicCredential = Buffer.from(`${apiUsername}:${apiPassword}`).toString('base64');
 
-    const res = await fetch(this.npsApiUrl(isLive, 'GetProcessId'), {
+    const res = await fetch(getNpsApiUrl(isLive, 'GetProcessId'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Basic ${basicCredential}` },
       body: JSON.stringify({ ...payload, Signature: signature }),
@@ -117,7 +110,7 @@ export class CardGateway implements PaymentGatewayAdapter {
     return {
       paymentId: generatePaymentId(),
       status: PaymentStatus.Processing,
-      formAction: this.npsHostedUrl(isLive),
+      formAction: getNpsHostedUrl(isLive),
       formFields,
       gatewayReference: merchantTxnId,
       raw: data,
@@ -176,7 +169,7 @@ export class CardGateway implements PaymentGatewayAdapter {
     };
     const signature = calculateNpsSignature(payload, credentials.secretKey);
     const basicCredential = Buffer.from(`${apiUsername}:${apiPassword}`).toString('base64');
-    const res = await fetch(this.npsApiUrl(isLive, 'CheckTransactionStatus'), {
+    const res = await fetch(getNpsApiUrl(isLive, 'CheckTransactionStatus'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Basic ${basicCredential}` },
       body: JSON.stringify({ ...payload, Signature: signature }),
@@ -265,7 +258,7 @@ export class CardGateway implements PaymentGatewayAdapter {
     const basicCredential = Buffer.from(`${apiUsername}:${apiPassword}`).toString('base64');
 
     try {
-      const res = await fetch(this.npsApiUrl(isLive, 'GetPaymentInstrumentDetails'), {
+      const res = await fetch(getNpsApiUrl(isLive, 'GetPaymentInstrumentDetails'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Basic ${basicCredential}` },
         body: JSON.stringify({ ...payload, Signature: signature }),

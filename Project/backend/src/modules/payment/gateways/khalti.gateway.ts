@@ -13,7 +13,7 @@ import {
 import { generatePaymentId } from '../utils/crypto.util.js';
 import { maskSecret } from '../utils/mask.util.js';
 import { getAppBaseUrl, getPaymentCallbackUrl, isLiveEnvironment } from '../utils/app-url.util.js';
-import { getDefaultGatewayBaseUrl } from '../constants/gateway-urls.js';
+import { getKhaltiApiBaseUrl } from '../constants/gateway-urls.js';
 
 type KhaltiApiResponse = {
   payment_url?: string;
@@ -35,7 +35,7 @@ type KhaltiApiResponse = {
 function khaltiBaseUrl(credentials: GatewayCredentials, isLive: boolean): string {
   const custom = credentials.extraSettings?.baseUrl?.trim();
   if (custom) return custom.replace(/\/$/, '');
-  return getDefaultGatewayBaseUrl('khalti', isLive) || (isLive ? 'https://khalti.com/api/v2' : 'https://dev.khalti.com/api/v2');
+  return getKhaltiApiBaseUrl(isLive);
 }
 
 function khaltiErrorMessage(data: KhaltiApiResponse): string {

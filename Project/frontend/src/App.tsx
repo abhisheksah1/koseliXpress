@@ -1012,23 +1012,11 @@ export default function App() {
     setDbState(newState);
     saveDbState(newState);
     window.dispatchEvent(new CustomEvent('koseli-store-updated', { detail: newState }));
-<<<<<<< HEAD
-    // Payment gateways sync only via Admin → Save (not on every keystroke)
-=======
     if (isAdminApp) {
       setToastType('success');
       setToastMessage('Saved successfully. Admin changes have been updated.');
     }
-    if (newState.paymentGateways) {
-      fetch('/api/payment/sync-gateways', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ paymentGateways: newState.paymentGateways })
-      }).catch(err => console.error('Failed to sync payment gateways to server:', err));
-    }
->>>>>>> 64241424c219dbf864b87a567d856d4caf9eba58
+    // Payment gateways sync only via Admin → Payment Gateways → Save (not on every keystroke)
     // Automatically synchronize catalog state to keep backend in lock-step
     fetch('/api/integrate/sync-catalog', {
       method: 'POST',

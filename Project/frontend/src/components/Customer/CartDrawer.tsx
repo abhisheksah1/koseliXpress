@@ -389,11 +389,7 @@ export default function CartDrawer({
     if (paymentMethod === 'khalti') {
       if (!hasApiCredentials) {
         alert(
-<<<<<<< HEAD
           'Khalti is not configured. Add your Secret Key in Admin → Settings → Payment Gateways (or .env KHALTI_SECRET_KEY from test-admin.khalti.com), then Save.',
-=======
-          'Khalti is currently unavailable. Please choose another payment method or contact us on WhatsApp.',
->>>>>>> 64241424c219dbf864b87a567d856d4caf9eba58
         );
         return;
       }

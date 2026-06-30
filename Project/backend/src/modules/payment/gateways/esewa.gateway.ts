@@ -18,15 +18,13 @@ import {
 } from '../utils/crypto.util.js';
 import { maskSecret } from '../utils/mask.util.js';
 import { getPaymentCallbackUrl, getPaymentFailureUrl, isLiveEnvironment } from '../utils/app-url.util.js';
-import { getEsewaStatusBaseUrl } from '../constants/gateway-urls.js';
+import { getEsewaFormUrl, getEsewaStatusBaseUrl } from '../constants/gateway-urls.js';
 
-/** UAT form POST URL — admin baseUrl overrides default */
+/** Form POST URL — admin baseUrl overrides .env ESEWA_FORM_URL */
 function esewaFormUrl(credentials: GatewayCredentials, isLive: boolean): string {
   const custom = credentials.extraSettings?.baseUrl?.trim();
   if (custom) return custom;
-  return isLive
-    ? 'https://epay.esewa.com.np/api/epay/main/v2/form'
-    : 'https://rc-epay.esewa.com.np/api/epay/main/v2/form';
+  return getEsewaFormUrl(isLive);
 }
 
 function mapEsewaStatus(status: string): { verified: boolean; paymentStatus: PaymentStatus } {

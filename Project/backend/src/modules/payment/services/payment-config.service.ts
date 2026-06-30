@@ -88,24 +88,36 @@ function legacyToCredentialMap(raw: LegacyPaymentGateway): GatewayEnvironmentCre
   return { [envKey]: set };
 }
 
+/** Map standard .env keys into the active bucket; *_ENV selects sandbox vs live + API URL. */
+function envBucketFromStandardKeys(
+  envFlag: string | undefined,
+  credentials: GatewayEnvironmentCredentials,
+): { environment: PaymentEnvironment; environmentCredentials: GatewayEnvironmentCredentialMap } {
+  const environment = normalizePaymentEnvironment(envFlag);
+  const bucketKey = environment === 'live' ? 'live' : 'sandbox';
+  const cleaned = Object.fromEntries(
+    Object.entries(credentials).filter(([, v]) => String(v || '').trim() !== ''),
+  ) as GatewayEnvironmentCredentials;
+  return {
+    environment,
+    environmentCredentials: Object.keys(cleaned).length ? { [bucketKey]: cleaned } : {},
+  };
+}
+
 function envDefaultsForGateway(gatewayName: string): GatewayConfigRecord | null {
   const g = gatewayName.toLowerCase();
   const appBase = getAppBaseUrl();
 
   if (g === 'esewa') {
-    const sandbox = {
-      merchantCode: process.env.ESEWA_SANDBOX_MERCHANT_CODE || process.env.ESEWA_MERCHANT_CODE || '',
-      secretKey: process.env.ESEWA_SANDBOX_SECRET_KEY || (process.env.ESEWA_ENV !== 'live' ? process.env.ESEWA_SECRET_KEY || '' : ''),
-    };
-    const live = {
-      merchantCode: process.env.ESEWA_LIVE_MERCHANT_CODE || (process.env.ESEWA_ENV === 'live' ? process.env.ESEWA_MERCHANT_CODE || '' : ''),
-      secretKey: process.env.ESEWA_LIVE_SECRET_KEY || (process.env.ESEWA_ENV === 'live' ? process.env.ESEWA_SECRET_KEY || '' : ''),
-    };
+    const { environment, environmentCredentials } = envBucketFromStandardKeys(process.env.ESEWA_ENV, {
+      merchantCode: process.env.ESEWA_MERCHANT_CODE,
+      secretKey: process.env.ESEWA_SECRET_KEY,
+    });
     return {
       gatewayName: 'esewa',
-      environment: normalizePaymentEnvironment(process.env.ESEWA_ENV),
+      environment,
       isActive: process.env.ESEWA_ENABLED === 'true',
-      environmentCredentials: { sandbox, live },
+      environmentCredentials,
       callbackUrl: `${appBase}/payment/esewa/success`,
       successUrl: `${appBase}/payment/esewa/success`,
       failureUrl: `${appBase}/payment/esewa/failure`,
@@ -113,20 +125,55 @@ function envDefaultsForGateway(gatewayName: string): GatewayConfigRecord | null 
   }
 
   if (g === 'khalti') {
-    const sandbox = {
-      secretKey: process.env.KHALTI_SANDBOX_SECRET_KEY || (process.env.KHALTI_ENV !== 'live' ? process.env.KHALTI_SECRET_KEY || '' : ''),
-      publicKey: process.env.KHALTI_SANDBOX_PUBLIC_KEY || (process.env.KHALTI_ENV !== 'live' ? process.env.KHALTI_PUBLIC_KEY || '' : ''),
-    };
-    const live = {
-      secretKey: process.env.KHALTI_LIVE_SECRET_KEY || (process.env.KHALTI_ENV === 'live' ? process.env.KHALTI_SECRET_KEY || '' : ''),
-      publicKey: process.env.KHALTI_LIVE_PUBLIC_KEY || (process.env.KHALTI_ENV === 'live' ? process.env.KHALTI_PUBLIC_KEY || '' : ''),
-    };
+    const { environment, environmentCredentials } = envBucketFromStandardKeys(process.env.KHALTI_ENV, {
+      secretKey: process.env.KHALTI_SECRET_KEY,
+      publicKey: process.env.KHALTI_PUBLIC_KEY,
+    });
     return {
       gatewayName: 'khalti',
-      environment: normalizePaymentEnvironment(process.env.KHALTI_ENV),
+      environment,
       isActive: process.env.KHALTI_ENABLED === 'true',
-      environmentCredentials: { sandbox, live },
+      environmentCredentials,
       callbackUrl: `${appBase}/payment/khalti/callback`,
+    };
+  }
+
+  if (g === 'nps' || g === 'card') {
+    const { environment, environmentCredentials } = envBucketFromStandardKeys(process.env.NPS_ENV, {
+      merchantId: process.env.NPS_MERCHANT_ID,
+      merchantCode: process.env.NPS_MERCHANT_ID,
+      secretKey: process.env.NPS_SECRET_KEY,
+      username: process.env.NPS_API_USERNAME,
+      password: process.env.NPS_API_PASSWORD,
+    });
+    return {
+      gatewayName: g,
+      environment,
+      isActive: process.env.NPS_ENABLED === 'true',
+      environmentCredentials,
+      extraSettings: {
+        merchantName: process.env.NPS_MERCHANT_NAME || '',
+        instrumentCode: process.env.NPS_INSTRUMENT_CODE || '',
+      },
+      callbackUrl: `${appBase}/payment/nps/callback`,
+    };
+  }
+
+  if (g === 'fonepay_static' || g === 'fonepay_dynamic') {
+    const { environment, environmentCredentials } = envBucketFromStandardKeys(process.env.FONEPAY_ENV, {
+      merchantCode: process.env.FONEPAY_MERCHANT_CODE,
+      secretKey: process.env.FONEPAY_SECRET_KEY,
+      username: process.env.FONEPAY_USERNAME,
+      password: process.env.FONEPAY_PASSWORD,
+    });
+    return {
+      gatewayName: g,
+      environment,
+      isActive: process.env.FONEPAY_ENABLED === 'true',
+      environmentCredentials,
+      extraSettings: {
+        qrImageUrl: process.env.FONEPAY_STATIC_QR_URL || '',
+      },
     };
   }
 
