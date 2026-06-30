@@ -6,6 +6,8 @@ import { paymentConfigRepository } from '../repositories/payment-config.reposito
 import { paymentRepository } from '../repositories/payment.repository.js';
 import { mergeGatewayConfigs, getEnvGatewayDefaults } from '../../../services/paymentGatewayService.js';
 import { maskSecret } from '../utils/mask.util.js';
+import { PaymentStatus } from '../types/payment.types.js';
+import { LegacyPaymentGateway } from '../types/payment-config.types.js';
 
 export const createPayment = asyncHandler(async (req, res) => {
   const result = await paymentService.createPayment({
@@ -84,13 +86,38 @@ export const legacyInitiateKhalti = asyncHandler(async (req, res) => {
     customerName: req.body.customer_info?.name,
     customerEmail: req.body.customer_info?.email,
     customerPhone: req.body.customer_info?.phone,
+    metadata: {
+      website_url: req.body.website_url,
+      purchase_order_name: req.body.purchase_order_name,
+    },
   });
   res.json({ payment_url: result.redirectUrl, pidx: result.gatewayReference, ...result });
 });
 
 export const legacyVerifyKhalti = asyncHandler(async (req, res) => {
-  const result = await paymentService.verifyPayment({ gateway: 'khalti', gatewayReference: req.body.pidx, rawPayload: req.body });
-  res.json({ ...result, verified: result.verified, pidx: req.body.pidx, status: result.verified ? 'Completed' : 'Pending' });
+  const result = await paymentService.verifyPayment({
+    gateway: 'khalti',
+    gatewayReference: req.body.pidx,
+    rawPayload: req.body,
+  });
+  const raw = result.raw as {
+    status?: string;
+    total_amount?: number;
+    transaction_id?: string | null;
+    fee?: number;
+    refunded?: boolean;
+    pidx?: string;
+  } | undefined;
+  res.json({
+    verified: result.verified,
+    pidx: raw?.pidx || req.body.pidx,
+    status: raw?.status || (result.verified ? 'Completed' : 'Pending'),
+    total_amount: raw?.total_amount ?? (result.amount !== undefined ? Math.round(result.amount * 100) : undefined),
+    transaction_id: raw?.transaction_id ?? null,
+    fee: raw?.fee ?? 0,
+    refunded: raw?.refunded ?? false,
+    environment: result.environment,
+  });
 });
 
 export const legacyVerifyEsewa = asyncHandler(async (req, res) => {
@@ -110,22 +137,84 @@ export const legacyInitiateNps = asyncHandler(async (req, res) => {
     gateway: 'nps',
     amount: Number(req.body.amount),
     currency: 'NPR',
+    successUrl: req.body.responseUrl,
+    metadata: req.body.transactionRemarks ? { transactionRemarks: req.body.transactionRemarks } : undefined,
   });
-  const redirectUrl = result.redirectUrl || '';
-  const processId = redirectUrl ? new URL(redirectUrl).searchParams.get('ProcessId') : null;
-  const gatewayUrl = redirectUrl.split('?')[0] || '';
+  const processId = result.formFields?.ProcessId || null;
   res.json({
     code: '0',
     message: 'Success',
     data: { ProcessId: processId },
-    gatewayUrl,
-    redirectUrl,
+    formAction: result.formAction,
+    formFields: result.formFields,
+    gatewayUrl: result.formAction,
   });
 });
 
 export const legacyCheckNpsStatus = asyncHandler(async (req, res) => {
-  const result = await paymentService.verifyPayment({ gateway: 'nps', gatewayReference: req.body.merchantTxnId, rawPayload: req.body });
-  res.json({ code: result.verified ? '0' : '1', data: { Status: result.verified ? 'Success' : 'Pending', MerchantTxnId: req.body.merchantTxnId }, verified: result.verified });
+  const result = await paymentService.verifyPayment({
+    gateway: 'nps',
+    gatewayReference: req.body.merchantTxnId,
+    rawPayload: req.body,
+  });
+  const raw = result.raw as {
+    code?: string | number;
+    message?: string;
+    data?: { Status?: string; Amount?: string; GatewayReferenceNo?: string; MerchantTxnId?: string };
+  } | undefined;
+  const apiCode = raw?.code ?? '0';
+  const status =
+    raw?.data?.Status ||
+    (result.verified ? 'Success' : result.status === PaymentStatus.Failed ? 'Fail' : 'Pending');
+  res.json({
+    code: apiCode,
+    message: raw?.message || 'Success',
+    data: {
+      Status: status,
+      MerchantTxnId: raw?.data?.MerchantTxnId || req.body.merchantTxnId,
+      Amount: raw?.data?.Amount || (result.amount !== undefined ? String(result.amount) : undefined),
+      GatewayReferenceNo: raw?.data?.GatewayReferenceNo,
+    },
+    verified: result.verified,
+  });
+});
+
+/** OnePG Notification URL — GET ?MerchantTxnId=&GatewayTxnId= → plain text "received" */
+export const legacyNpsNotification = asyncHandler(async (req, res) => {
+  const merchantTxnId = String(req.query.MerchantTxnId || req.query.merchantTxnId || '').trim();
+  const gatewayTxnId = String(req.query.GatewayTxnId || req.query.gatewayTxnId || '').trim();
+
+  if (!merchantTxnId) {
+    res.status(400).type('text/plain').send('missing MerchantTxnId');
+    return;
+  }
+
+  const webhookId = `nps:${merchantTxnId}:${gatewayTxnId || 'none'}`;
+  const isNew = await paymentRepository.logWebhook({
+    webhookId,
+    gateway: 'nps',
+    eventType: 'notification',
+    payload: { MerchantTxnId: merchantTxnId, GatewayTxnId: gatewayTxnId },
+    processed: false,
+    duplicate: false,
+  });
+
+  if (!isNew) {
+    res.type('text/plain').send('already received');
+    return;
+  }
+
+  try {
+    await paymentService.verifyPayment({
+      gateway: 'nps',
+      gatewayReference: merchantTxnId,
+      rawPayload: { MerchantTxnId: merchantTxnId, GatewayTxnId: gatewayTxnId },
+    });
+  } catch {
+    // OnePG expects "received" even if status check is temporarily unavailable
+  }
+
+  res.type('text/plain').send('received');
 });
 
 export const legacyGetGateways = asyncHandler(async (_req, res) => {
@@ -135,9 +224,11 @@ export const legacyGetGateways = asyncHandler(async (_req, res) => {
 });
 
 export const legacySyncGateways = asyncHandler(async (req, res) => {
-  await paymentRepository.syncLegacyApiStoreGateways(req.body.paymentGateways);
+  const gateways = (req.body.paymentGateways || []) as LegacyPaymentGateway[];
+  await paymentRepository.syncLegacyApiStoreGateways(gateways);
+  await paymentConfigRepository.syncLegacyGateways(gateways);
   paymentConfigRepository.invalidateCache();
-  res.json({ success: true, message: 'Payment gateways synced.' });
+  res.json({ success: true, message: 'Payment gateway configuration saved.' });
 });
 
 export const legacyEnvStatus = asyncHandler(async (_req, res) => {

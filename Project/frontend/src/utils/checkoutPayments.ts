@@ -70,51 +70,27 @@ export function getCheckoutPaymentOptions(
   gateways: PaymentGateway[] | undefined,
   currencyCode: string,
 ): CheckoutPaymentOption[] {
-  return CHECKOUT_PAYMENT_SLOTS.map((slot) => {
+  return CHECKOUT_PAYMENT_SLOTS.flatMap((slot) => {
     const gateway = resolveGatewayForSlot(gateways, slot.id) ?? null;
     const gatewayId = gateway?.id ?? slot.gatewayIds[0];
     const displayName = gateway?.name || slot.displayName;
 
-    if (!gateway) {
-      return {
-        slotId: slot.id,
-        gatewayId,
-        gateway: null,
-        displayName,
-        isSelectable: false,
-        unavailableReason: 'Not configured by admin',
-      };
-    }
-
-    if (!gateway.isEnabled) {
-      return {
-        slotId: slot.id,
-        gatewayId: gateway.id,
-        gateway,
-        displayName,
-        isSelectable: false,
-        unavailableReason: 'Not available — disabled by admin',
-      };
+    // Disabled gateways are hidden from checkout (admin enable/disable)
+    if (!gateway || !gateway.isEnabled) {
+      return [];
     }
 
     if (!isGatewayCurrencyCompatible(gateway, currencyCode)) {
-      return {
-        slotId: slot.id,
-        gatewayId: gateway.id,
-        gateway,
-        displayName,
-        isSelectable: false,
-        unavailableReason: `Not available for ${currencyCode}`,
-      };
+      return [];
     }
 
-    return {
+    return [{
       slotId: slot.id,
       gatewayId: gateway.id,
       gateway,
       displayName,
       isSelectable: true,
-    };
+    }];
   });
 }
 

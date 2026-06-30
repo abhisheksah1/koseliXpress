@@ -1,5 +1,5 @@
-/** Submit eSewa v2 payment form via POST redirect */
-export function submitEsewaForm(action: string, fields: Record<string, string>): void {
+/** Submit payment gateway form via POST redirect (eSewa, NPS OnePG, etc.) */
+export function submitPaymentForm(action: string, fields: Record<string, string>): void {
   const form = document.createElement('form');
   form.method = 'POST';
   form.action = action;
@@ -14,6 +14,9 @@ export function submitEsewaForm(action: string, fields: Record<string, string>):
   document.body.appendChild(form);
   form.submit();
 }
+
+/** @deprecated Use submitPaymentForm */
+export const submitEsewaForm = submitPaymentForm;
 
 export async function initiateEsewaCheckout(params: {
   amount: number;
@@ -151,13 +154,17 @@ export type NpsInitiateResult = {
   code: string | number;
   message?: string;
   data?: { ProcessId?: string };
+  formAction?: string;
+  formFields?: Record<string, string>;
   gatewayUrl?: string;
 };
 
-/** NPS OnePG — server initiates, browser redirects to hosted card page */
+/** NPS OnePG — GetProcessId on server, POST form to gateway (§4.3 + §4.4) */
 export async function initiateNpsCheckout(params: {
   amount: number;
   merchantTxnId: string;
+  responseUrl?: string;
+  transactionRemarks?: string;
 }): Promise<NpsInitiateResult> {
   const res = await fetch('/api/payment/initiate-nps', {
     method: 'POST',
@@ -169,14 +176,16 @@ export async function initiateNpsCheckout(params: {
   if (data.code !== '0' && data.code !== 0) {
     throw new Error(data.message || 'NPS gateway rejected the payment request.');
   }
-  if (!data.data?.ProcessId || !data.gatewayUrl) {
+  if (!data.formAction || !data.formFields?.ProcessId) {
     throw new Error('NPS did not return a payment session.');
   }
+  submitPaymentForm(data.formAction, data.formFields);
   return data;
 }
 
-export function redirectToNpsHostedPage(gatewayUrl: string, processId: string): void {
-  window.location.href = `${gatewayUrl}?ProcessId=${encodeURIComponent(processId)}`;
+/** @deprecated NPS uses POST form submit via initiateNpsCheckout */
+export function redirectToNpsHostedPage(_gatewayUrl: string, _processId: string): void {
+  throw new Error('NPS redirect must use initiateNpsCheckout POST form flow.');
 }
 
 export type NpsStatusResult = {
@@ -195,12 +204,11 @@ export async function checkNpsPaymentStatus(merchantTxnId: string): Promise<NpsS
   });
   const data = (await res.json()) as NpsStatusResult & { error?: string };
   if (!res.ok) throw new Error(data.error || 'NPS status check failed');
-  const status = String(data.data?.Status || '').toLowerCase();
+  const status = String(data.data?.Status || '').trim();
+  const normalized = status.toLowerCase();
   return {
     ...data,
-    verified: data.code === '0' || data.code === 0
-      ? status === 'success' || status === 'completed' || status === 'complete'
-      : false,
+    verified: (data.code === '0' || data.code === 0) && normalized === 'success',
   };
 }
 

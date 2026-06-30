@@ -14,6 +14,12 @@ export function getPaymentCallbackUrl(gateway: string): string {
   return map[gateway] || `${base}/payment/callback/${gateway}`;
 }
 
+/** OnePG server-to-server Notification URL (register with NPS team) */
+export function getNpsNotificationUrl(): string {
+  const base = process.env.PAYMENT_WEBHOOK_URL || process.env.BACKEND_URL || process.env.APP_URL || 'http://localhost:3001';
+  return `${base.replace(/\/$/, '')}/api/payment/nps/notification`;
+}
+
 export function getPaymentFailureUrl(gateway: string): string {
   const base = process.env.PAYMENT_CALLBACK_URL || getAppBaseUrl();
   return `${base}/payment/${gateway}/failure`;

@@ -103,11 +103,17 @@ export function mergeGatewayConfigs(stored: GatewayConfig[], envDefaults: Gatewa
       byId.set(envGw.id, envGw);
       continue;
     }
+    const merchantId = existing.merchantId || envGw.merchantId;
+    const adminSecret = (existing.secretKey || '').trim();
     byId.set(envGw.id, {
       ...existing,
-      merchantId: existing.merchantId || envGw.merchantId,
-      secretKey: existing.secretKey || envGw.secretKey,
-      publicKey: existing.publicKey || envGw.publicKey,
+      merchantId: merchantId.startsWith('http') ? (envGw.merchantId || '') : merchantId,
+      secretKey: adminSecret || envGw.secretKey,
+      publicKey: (existing.publicKey || '').startsWith('http') ? (envGw.publicKey || '') : (existing.publicKey || envGw.publicKey),
+      apiEnvironment:
+        merchantId === 'EPAYTEST'
+          ? 'test'
+          : existing.apiEnvironment || envGw.apiEnvironment,
       extraSettings: mergeExtraSettings(envGw.extraSettings, existing.extraSettings),
     });
   }

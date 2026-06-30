@@ -12,6 +12,7 @@ import {
   legacyVerifyEsewa,
   legacyInitiateNps,
   legacyCheckNpsStatus,
+  legacyNpsNotification,
   legacyGetGateways,
   legacySyncGateways,
   legacyEnvStatus,
@@ -27,29 +28,31 @@ import { paymentErrorHandler } from '../controllers/payment.controller.helpers.j
 
 const router = Router();
 
-router.use(paymentRateLimit);
+// Rate limit checkout / verify only — not admin config or webhooks
+const checkoutLimit = paymentRateLimit;
 
 // New REST API
-router.post('/create', createPayment);
-router.post('/verify', verifyPayment);
+router.post('/create', checkoutLimit, createPayment);
+router.post('/verify', checkoutLimit, verifyPayment);
 router.post('/webhook/:gateway', validateWebhookSecret, paymentWebhook);
 router.get('/status/:id', getPaymentStatus);
 router.get('/gateways', listGateways);
 router.get('/events/:id', subscribePaymentEvents);
 
-// Admin API
+// Admin API (no rate limit — internal configuration)
 router.get('/admin/payment-config', getAdminPaymentConfig);
 router.put('/admin/payment-config', updateAdminPaymentConfig);
 router.post('/admin/payment-config/test', testAdminPaymentConfig);
 router.post('/admin/payment-config/test/:gatewayId', testAdminPaymentConfig);
 
 // Legacy compatibility (/api/payment/*)
-router.post('/initiate-esewa', legacyInitiateEsewa);
-router.post('/initiate-khalti', legacyInitiateKhalti);
-router.post('/verify-khalti', legacyVerifyKhalti);
-router.post('/verify-esewa', legacyVerifyEsewa);
-router.post('/initiate-nps', legacyInitiateNps);
-router.post('/check-nps-status', legacyCheckNpsStatus);
+router.post('/initiate-esewa', checkoutLimit, legacyInitiateEsewa);
+router.post('/initiate-khalti', checkoutLimit, legacyInitiateKhalti);
+router.post('/verify-khalti', checkoutLimit, legacyVerifyKhalti);
+router.post('/verify-esewa', checkoutLimit, legacyVerifyEsewa);
+router.post('/initiate-nps', checkoutLimit, legacyInitiateNps);
+router.post('/check-nps-status', checkoutLimit, legacyCheckNpsStatus);
+router.get('/nps/notification', legacyNpsNotification);
 router.get('/get-gateways', legacyGetGateways);
 router.post('/sync-gateways', legacySyncGateways);
 router.get('/env-status', legacyEnvStatus);

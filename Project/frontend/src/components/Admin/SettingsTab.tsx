@@ -2406,7 +2406,7 @@ export default function SettingsTab({ state, onUpdateState }: SettingsTabProps) 
             </div>
 
             <p className="text-xs text-slate-500 font-sans leading-normal">
-              Toggle payment integrations and specify your sandbox keys, merchant hash secrets, and merchant codes. Checkout options (COD, eSewa, Khalti, Fonepay, Visa/Mastercard) always appear for customers — disabled methods show as <strong>Not available</strong>. Credentials can also be set in <code className="text-[10px] bg-slate-100 px-1 rounded">.env</code> — admin values override env when filled.
+              Toggle payment integrations and specify credentials per gateway. Priority: <strong>Admin Panel</strong> → <code className="text-[10px] bg-slate-100 px-1 rounded">.env</code> → defaults. Switch <strong>Sandbox / Production</strong> to change API URLs and active credentials without code changes. Disabled gateways are hidden at checkout.
             </p>
 
             {/* Quick controls for checkout payment slots */}
@@ -2645,6 +2645,37 @@ export default function SettingsTab({ state, onUpdateState }: SettingsTabProps) 
                             </button>
                           </div>
                         </div>
+
+                        <div className="md:col-span-2 p-3 bg-emerald-50/50 border border-emerald-100 rounded-lg grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <p className="md:col-span-2 text-[10px] text-emerald-900 font-semibold">
+                            Optional: store both Sandbox and Live eSewa credentials (Admin first, then .env).
+                          </p>
+                          {(['sandbox', 'live'] as const).map((envKey) => (
+                            <div key={envKey} className="space-y-2">
+                              <span className="text-[9px] font-black uppercase text-slate-500">{envKey} merchant code</span>
+                              <input
+                                type="text"
+                                className="w-full p-2 border border-slate-200 rounded text-xs"
+                                placeholder={envKey === 'sandbox' ? 'EPAYTEST' : 'Live merchant code'}
+                                value={gw.extraSettings?.[`${envKey}MerchantCode`] || ''}
+                                onChange={(e) => {
+                                  const extra = gw.extraSettings || {};
+                                  updateField({ extraSettings: { ...extra, [`${envKey}MerchantCode`]: e.target.value } });
+                                }}
+                              />
+                              <span className="text-[9px] font-black uppercase text-slate-500">{envKey} secret key</span>
+                              <input
+                                type="password"
+                                className="w-full p-2 border border-slate-200 rounded text-xs font-mono"
+                                value={gw.extraSettings?.[`${envKey}SecretKey`] || ''}
+                                onChange={(e) => {
+                                  const extra = gw.extraSettings || {};
+                                  updateField({ extraSettings: { ...extra, [`${envKey}SecretKey`]: e.target.value } });
+                                }}
+                              />
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
 
@@ -2678,7 +2709,7 @@ export default function SettingsTab({ state, onUpdateState }: SettingsTabProps) 
 
                         <div>
                           <label className="block text-[9.5px] font-bold text-slate-500 uppercase tracking-widest mb-1 font-mono">
-                            Khalti Live Secret Key *
+                            Khalti Secret Key (active environment) *
                           </label>
                           <div className="relative flex">
                             <span className="absolute left-2.5 top-2.5 text-slate-400">
@@ -2701,6 +2732,37 @@ export default function SettingsTab({ state, onUpdateState }: SettingsTabProps) 
                             </button>
                           </div>
                         </div>
+                      </div>
+
+                      <div className="p-3 bg-violet-50/50 border border-violet-100 rounded-lg grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <p className="md:col-span-2 text-[10px] text-violet-900 font-semibold">
+                          Optional: store both Sandbox and Live Khalti secret keys (Admin first, then .env).
+                        </p>
+                        {(['sandbox', 'live'] as const).map((envKey) => (
+                          <div key={envKey} className="space-y-2">
+                            <span className="text-[9px] font-black uppercase text-slate-500">{envKey} secret key</span>
+                            <input
+                              type="password"
+                              className="w-full p-2 border border-slate-200 rounded text-xs font-mono"
+                              placeholder={`${envKey}_secret_key_...`}
+                              value={gw.extraSettings?.[`${envKey}SecretKey`] || ''}
+                              onChange={(e) => {
+                                const extra = gw.extraSettings || {};
+                                updateField({ extraSettings: { ...extra, [`${envKey}SecretKey`]: e.target.value } });
+                              }}
+                            />
+                            <span className="text-[9px] font-black uppercase text-slate-500">{envKey} public key</span>
+                            <input
+                              type="text"
+                              className="w-full p-2 border border-slate-200 rounded text-xs font-mono"
+                              value={gw.extraSettings?.[`${envKey}PublicKey`] || ''}
+                              onChange={(e) => {
+                                const extra = gw.extraSettings || {};
+                                updateField({ extraSettings: { ...extra, [`${envKey}PublicKey`]: e.target.value } });
+                              }}
+                            />
+                          </div>
+                        ))}
                       </div>
                       </div>
                     )}

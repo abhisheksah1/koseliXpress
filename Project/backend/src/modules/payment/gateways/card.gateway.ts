@@ -12,8 +12,23 @@ import {
 } from '../types/payment.types.js';
 import { calculateNpsSignature, generatePaymentId } from '../utils/crypto.util.js';
 import { maskSecret } from '../utils/mask.util.js';
-import { isLiveEnvironment } from '../utils/app-url.util.js';
+import { getPaymentCallbackUrl, isLiveEnvironment } from '../utils/app-url.util.js';
 import crypto from 'crypto';
+
+/** OnePG CheckTransactionStatus values: Success | Fail | Pending */
+export function mapNpsTransactionStatus(statusText: string): {
+  verified: boolean;
+  status: PaymentStatus;
+} {
+  const normalized = String(statusText || '').trim().toLowerCase();
+  if (normalized === 'success') {
+    return { verified: true, status: PaymentStatus.Success };
+  }
+  if (normalized === 'fail' || normalized === 'failed') {
+    return { verified: false, status: PaymentStatus.Failed };
+  }
+  return { verified: false, status: PaymentStatus.Pending };
+}
 
 function verifyWebhookHmacSafe(payload: string, signature: string, secret: string): boolean {
   if (!signature || !secret) return false;
@@ -78,10 +93,32 @@ export class CardGateway implements PaymentGatewayAdapter {
     if (data.code !== '0' && data.code !== 0) throw new Error(data.message || 'NPS rejected payment request');
     if (!data.data?.ProcessId) throw new Error('NPS did not return ProcessId');
 
+    const responseUrl = input.successUrl || input.returnUrl || getPaymentCallbackUrl('nps');
+    const instrumentCode =
+      credentials.extraSettings?.instrumentCode || process.env.NPS_INSTRUMENT_CODE || '';
+    const transactionRemarks =
+      (input.metadata?.remarks as string | undefined) ||
+      (input.metadata?.transactionRemarks as string | undefined) ||
+      `Order ${merchantTxnId}`;
+
+    const formFields: Record<string, string> = {
+      MerchantId: credentials.merchantCode,
+      MerchantName: merchantName,
+      Amount: formattedAmount,
+      MerchantTxnId: merchantTxnId,
+      ProcessId: data.data.ProcessId,
+      TransactionRemarks: transactionRemarks,
+      ResponseUrl: responseUrl,
+    };
+    if (instrumentCode) {
+      formFields.InstrumentCode = instrumentCode;
+    }
+
     return {
       paymentId: generatePaymentId(),
       status: PaymentStatus.Processing,
-      redirectUrl: `${this.npsHostedUrl(isLive)}?ProcessId=${encodeURIComponent(data.data.ProcessId)}`,
+      formAction: this.npsHostedUrl(isLive),
+      formFields,
       gatewayReference: merchantTxnId,
       raw: data,
     };
@@ -144,16 +181,20 @@ export class CardGateway implements PaymentGatewayAdapter {
       headers: { 'Content-Type': 'application/json', Authorization: `Basic ${basicCredential}` },
       body: JSON.stringify({ ...payload, Signature: signature }),
     });
-    const data = (await res.json()) as { code?: string | number; data?: { Status?: string; Amount?: string } };
-    const statusText = String(data.data?.Status || '').toLowerCase();
-    const verified = (data.code === '0' || data.code === 0) && ['success', 'completed', 'complete'].includes(statusText);
+    const data = (await res.json()) as {
+      code?: string | number;
+      data?: { Status?: string; Amount?: string; GatewayReferenceNo?: string };
+    };
+    const apiOk = data.code === '0' || data.code === 0;
+    const mapped = mapNpsTransactionStatus(apiOk ? String(data.data?.Status || '') : '');
     return {
-      verified,
-      status: verified ? PaymentStatus.Success : PaymentStatus.Pending,
+      verified: apiOk && mapped.verified,
+      status: apiOk ? mapped.status : PaymentStatus.Pending,
       gatewayReference: merchantTxnId,
+      transactionId: data.data?.GatewayReferenceNo,
       amount: data.data?.Amount ? Number(data.data.Amount) : undefined,
       currency: 'NPR',
-      paidAt: verified ? new Date() : undefined,
+      paidAt: mapped.verified ? new Date() : undefined,
       raw: data,
     };
   }
@@ -209,14 +250,41 @@ export class CardGateway implements PaymentGatewayAdapter {
       return { ok: true, message: 'Stripe credentials configured.', details: { provider: 'stripe' } };
     }
     const merchantName = credentials.extraSettings?.merchantName || process.env.NPS_MERCHANT_NAME || '';
-    if (!credentials.merchantCode || !credentials.secretKey || !merchantName) {
-      return { ok: false, message: 'NPS credentials incomplete.' };
+    const apiUsername = credentials.extraSettings?.apiUsername || credentials.username || process.env.NPS_API_USERNAME || '';
+    const apiPassword = credentials.extraSettings?.apiPassword || credentials.password || process.env.NPS_API_PASSWORD || '';
+    if (!credentials.merchantCode || !credentials.secretKey || !merchantName || !apiUsername || !apiPassword) {
+      return { ok: false, message: 'NPS credentials incomplete (MerchantId, SecretKey, MerchantName, API username/password).' };
     }
-    return {
-      ok: true,
-      message: `NPS card gateway configured (${credentials.environment}).`,
-      details: { merchantId: maskSecret(credentials.merchantCode), merchantName },
+
+    const isLive = isLiveEnvironment(credentials.environment);
+    const payload = {
+      MerchantId: credentials.merchantCode,
+      MerchantName: merchantName,
     };
+    const signature = calculateNpsSignature(payload, credentials.secretKey);
+    const basicCredential = Buffer.from(`${apiUsername}:${apiPassword}`).toString('base64');
+
+    try {
+      const res = await fetch(this.npsApiUrl(isLive, 'GetPaymentInstrumentDetails'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Basic ${basicCredential}` },
+        body: JSON.stringify({ ...payload, Signature: signature }),
+      });
+      const data = (await res.json()) as { code?: string | number; message?: string; data?: unknown[] };
+      if (data.code === '0' || data.code === 0) {
+        return {
+          ok: true,
+          message: `NPS OnePG connected (${credentials.environment}). ${Array.isArray(data.data) ? data.data.length : 0} payment instrument(s) available.`,
+          details: { merchantId: maskSecret(credentials.merchantCode), merchantName, instrumentCount: data.data?.length ?? 0 },
+        };
+      }
+      return { ok: false, message: data.message || 'NPS GetPaymentInstrumentDetails failed.', details: data };
+    } catch (err: unknown) {
+      return {
+        ok: false,
+        message: err instanceof Error ? err.message : 'NPS connection test failed.',
+      };
+    }
   }
 }
 

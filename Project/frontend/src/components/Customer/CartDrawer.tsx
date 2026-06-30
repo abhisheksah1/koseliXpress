@@ -8,7 +8,7 @@ import GiftLoungeBackdrop from './GiftLoungeBackdrop';
 import { CheckoutStepBanner } from './CheckoutUI';
 import { sendOrderStatusEmail } from '../../utils/emailHelper';
 import { getWhatsAppNotificationUrl } from '../../utils/whatsappHelper';
-import { initiateEsewaCheckout, initiateKhaltiCheckout, initiateNpsCheckout, redirectToNpsHostedPage } from '../../utils/paymentHelpers';
+import { initiateEsewaCheckout, initiateKhaltiCheckout, initiateNpsCheckout } from '../../utils/paymentHelpers';
 import { savePendingRedirectCheckout, type PendingRedirectCheckout } from '../../utils/pendingCheckout';
 import {
   getFirstSelectablePaymentGatewayId,
@@ -389,7 +389,7 @@ export default function CartDrawer({
     if (paymentMethod === 'khalti') {
       if (!hasApiCredentials) {
         alert(
-          'Khalti is not fully configured. The store admin must add a Live Secret Key under Admin → Settings → Payment Gateways, then Save & Sync.',
+          'Khalti is not configured. Add your Secret Key in Admin → Settings → Payment Gateways (or .env KHALTI_SECRET_KEY from test-admin.khalti.com), then Save.',
         );
         return;
       }
@@ -459,11 +459,12 @@ export default function CartDrawer({
     setIsVerifyingPaymentFlow(true);
     setPaymentVerificationStatus('Redirecting to secure Visa/Mastercard payment page…');
     try {
-      const session = await initiateNpsCheckout({
+      await initiateNpsCheckout({
         amount: grandTotalConverted,
         merchantTxnId: tempRefId,
+        responseUrl: `${window.location.origin}/payment/nps/callback`,
+        transactionRemarks: `Koseli Xpress order ${tempRefId}`,
       });
-      redirectToNpsHostedPage(session.gatewayUrl!, session.data!.ProcessId!);
     } catch (err: unknown) {
       setIsVerifyingPaymentFlow(false);
       setIsRedirectingPayment(false);

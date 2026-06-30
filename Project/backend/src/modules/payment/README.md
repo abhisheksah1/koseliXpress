@@ -7,7 +7,7 @@ Production-ready payment subsystem with gateway adapter pattern, MongoDB persist
 ```
 backend/src/modules/payment/
 ├── gateways/          # Adapter implementations (eSewa, Khalti, Fonepay, Card/NPS)
-├── services/          # Business logic (PaymentService, config cache, SSE events)
+├── services/          # PaymentService, PaymentConfigService, PaymentManager, SSE events
 ├── repositories/      # MongoDB + legacy ApiStore merge
 ├── controllers/       # HTTP handlers
 ├── routes/            # Express router
@@ -25,7 +25,7 @@ backend/src/modules/payment/
 | `payment_transactions` | Gateway request/response audit trail |
 | `payment_logs` | Admin & system logs (secrets masked) |
 | `payment_webhooks` | Idempotent webhook storage |
-| `payment_gateway_configs` | Admin-managed credentials |
+| `payment_gateway_configs` | Admin-managed credentials (sandbox + live per gateway) |
 
 Run migration: `npm run migrate:payment`
 
@@ -33,9 +33,13 @@ Run migration: `npm run migrate:payment`
 
 See project `.env` — never commit secrets.
 
-Credential priority: **Admin DB → ApiStore legacy → .env fallback**
+Credential priority: **Admin Panel → `.env` → defaults**
 
-Config cache TTL: 60 seconds (auto-refresh, no restart required).
+- Toggle **Sandbox / Production** in Admin to switch API URLs and active credentials (no code changes).
+- Store optional dual Sandbox + Live keys in Admin (eSewa/Khalti) or via `.env` (`*_SANDBOX_*` / `*_LIVE_*` vars).
+- Disabled gateways are hidden from checkout.
+
+Config cache TTL: 60 seconds (updates apply within ~1 minute; restart backend after `.env` changes).
 
 ## API Endpoints
 
@@ -113,5 +117,8 @@ npm run test:payment
 1. Set `.env` credentials
 2. `npm run migrate:payment`
 3. Enable gateways in Admin → Settings → Payment Gateways
-4. Configure NPS return URL: `{APP_URL}/payment/nps/callback`
-5. Set `PAYMENT_WEBHOOK_SECRET` for webhook endpoints
+4. Configure NPS URLs with OnePG team:
+   - **Response URL** (customer browser): `{APP_URL}/payment/nps/callback`
+   - **Notification URL** (server webhook): `{BACKEND_URL}/api/payment/nps/notification`
+5. NPS flow: `GetProcessId` → POST form to gateway → notification webhook → `CheckTransactionStatus`
+6. Set `PAYMENT_WEBHOOK_SECRET` for signed webhook endpoints (Stripe, etc.)

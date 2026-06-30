@@ -141,13 +141,37 @@ export interface IPaymentGatewayConfig extends Document {
   password: string;
   callbackUrl: string;
   verifyUrl: string;
+  successUrl: string;
+  failureUrl: string;
   environment: string;
   isActive: boolean;
+  environmentCredentials?: {
+    sandbox?: Record<string, string>;
+    live?: Record<string, string>;
+  };
   extraSettings?: Record<string, string>;
   updatedBy?: string;
   createdAt: Date;
   updatedAt: Date;
 }
+
+const EnvironmentCredentialSchema = new Schema(
+  {
+    merchantCode: { type: String, default: '' },
+    merchantId: { type: String, default: '' },
+    secretKey: { type: String, default: '' },
+    publicKey: { type: String, default: '' },
+    clientId: { type: String, default: '' },
+    clientSecret: { type: String, default: '' },
+    baseUrl: { type: String, default: '' },
+    successUrl: { type: String, default: '' },
+    failureUrl: { type: String, default: '' },
+    callbackUrl: { type: String, default: '' },
+    username: { type: String, default: '' },
+    password: { type: String, default: '' },
+  },
+  { _id: false },
+);
 
 const PaymentGatewayConfigSchema = new Schema<IPaymentGatewayConfig>(
   {
@@ -159,8 +183,14 @@ const PaymentGatewayConfigSchema = new Schema<IPaymentGatewayConfig>(
     password: { type: String, default: '' },
     callbackUrl: { type: String, default: '' },
     verifyUrl: { type: String, default: '' },
+    successUrl: { type: String, default: '' },
+    failureUrl: { type: String, default: '' },
     environment: { type: String, default: 'sandbox' },
     isActive: { type: Boolean, default: false },
+    environmentCredentials: {
+      sandbox: { type: EnvironmentCredentialSchema, default: undefined },
+      live: { type: EnvironmentCredentialSchema, default: undefined },
+    },
     extraSettings: { type: Schema.Types.Mixed },
     updatedBy: { type: String },
   },

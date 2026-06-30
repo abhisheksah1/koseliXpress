@@ -931,15 +931,7 @@ export default function App() {
     setDbState(newState);
     saveDbState(newState);
     window.dispatchEvent(new CustomEvent('koseli-store-updated', { detail: newState }));
-    if (newState.paymentGateways) {
-      fetch('/api/payment/sync-gateways', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ paymentGateways: newState.paymentGateways })
-      }).catch(err => console.error('Failed to sync payment gateways to server:', err));
-    }
+    // Payment gateways sync only via Admin → Save (not on every keystroke)
     // Automatically synchronize catalog state to keep backend in lock-step
     fetch('/api/integrate/sync-catalog', {
       method: 'POST',

@@ -12,7 +12,8 @@ export const CONFIG_CACHE_TTL_MS = 60_000;
 
 export const PAYMENT_RATE_LIMIT = {
   windowMs: 60_000,
-  maxRequests: 30,
+  /** Checkout/initiate only — admin sync routes are not rate limited */
+  maxRequests: process.env.NODE_ENV === 'production' ? 40 : 120,
 };
 
 export const VERIFY_RETRY = {

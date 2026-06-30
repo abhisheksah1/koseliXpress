@@ -13,6 +13,7 @@ import {
 import { generatePaymentId } from '../utils/crypto.util.js';
 import { maskSecret } from '../utils/mask.util.js';
 import { getAppBaseUrl, getPaymentCallbackUrl, isLiveEnvironment } from '../utils/app-url.util.js';
+import { getDefaultGatewayBaseUrl } from '../constants/gateway-urls.js';
 
 type KhaltiApiResponse = {
   payment_url?: string;
@@ -31,8 +32,10 @@ type KhaltiApiResponse = {
   refunded?: boolean;
 };
 
-function khaltiBaseUrl(isLive: boolean): string {
-  return isLive ? 'https://khalti.com/api/v2' : 'https://dev.khalti.com/api/v2';
+function khaltiBaseUrl(credentials: GatewayCredentials, isLive: boolean): string {
+  const custom = credentials.extraSettings?.baseUrl?.trim();
+  if (custom) return custom.replace(/\/$/, '');
+  return getDefaultGatewayBaseUrl('khalti', isLive) || (isLive ? 'https://khalti.com/api/v2' : 'https://dev.khalti.com/api/v2');
 }
 
 function khaltiErrorMessage(data: KhaltiApiResponse): string {
@@ -41,6 +44,27 @@ function khaltiErrorMessage(data: KhaltiApiResponse): string {
   if (data.purchase_order_id?.length) return data.purchase_order_id.join(', ');
   if (data.purchase_order_name?.length) return data.purchase_order_name.join(', ');
   return data.detail || data.error_key || data.message || JSON.stringify(data);
+}
+
+/** Khalti ePayment lookup statuses — only Completed is success (per Khalti docs) */
+export function mapKhaltiLookupStatus(status: string): { verified: boolean; status: PaymentStatus } {
+  const normalized = String(status || '').trim();
+  if (normalized === 'Completed') {
+    return { verified: true, status: PaymentStatus.Success };
+  }
+  if (normalized === 'User canceled') {
+    return { verified: false, status: PaymentStatus.Cancelled };
+  }
+  if (normalized === 'Expired') {
+    return { verified: false, status: PaymentStatus.Expired };
+  }
+  if (normalized === 'Refunded' || normalized === 'Partially Refunded' || normalized === 'Partially refunded') {
+    return { verified: false, status: PaymentStatus.Refunded };
+  }
+  if (normalized === 'Pending' || normalized === 'Initiated') {
+    return { verified: false, status: PaymentStatus.Pending };
+  }
+  return { verified: false, status: PaymentStatus.Failed };
 }
 
 export class KhaltiGateway implements PaymentGatewayAdapter {
@@ -54,10 +78,10 @@ export class KhaltiGateway implements PaymentGatewayAdapter {
 
     const payload = {
       return_url: input.returnUrl || getPaymentCallbackUrl('khalti'),
-      website_url: getAppBaseUrl(),
+      website_url: String(input.metadata?.website_url || getAppBaseUrl()),
       amount: amountPaisa,
       purchase_order_id: input.orderRef,
-      purchase_order_name: `Order ${input.orderRef}`,
+      purchase_order_name: String(input.metadata?.purchase_order_name || `Order ${input.orderRef}`),
       customer_info: {
         name: input.customerName || 'Customer',
         email: input.customerEmail || 'guest@customer.com',
@@ -65,7 +89,7 @@ export class KhaltiGateway implements PaymentGatewayAdapter {
       },
     };
 
-    const res = await fetch(`${khaltiBaseUrl(isLive)}/epayment/initiate/`, {
+    const res = await fetch(`${khaltiBaseUrl(credentials, isLive)}/epayment/initiate/`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Key ${credentials.secretKey}` },
       body: JSON.stringify(payload),
@@ -88,22 +112,22 @@ export class KhaltiGateway implements PaymentGatewayAdapter {
     const pidx = String(input.gatewayReference || input.rawPayload?.pidx || '').trim();
     if (!pidx) throw new Error('Missing pidx for Khalti verification.');
     const isLive = isLiveEnvironment(credentials.environment);
-    const res = await fetch(`${khaltiBaseUrl(isLive)}/epayment/lookup/`, {
+    const res = await fetch(`${khaltiBaseUrl(credentials, isLive)}/epayment/lookup/`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Key ${credentials.secretKey}` },
       body: JSON.stringify({ pidx }),
     });
     const data = (await res.json()) as KhaltiApiResponse;
     if (!res.ok || !data.pidx) throw new Error(khaltiErrorMessage(data));
-    const verified = data.status === 'Completed';
+    const mapped = mapKhaltiLookupStatus(String(data.status || ''));
     return {
-      verified,
-      status: verified ? PaymentStatus.Success : PaymentStatus.Pending,
+      verified: mapped.verified,
+      status: mapped.status,
       transactionId: data.transaction_id || undefined,
       gatewayReference: data.pidx,
       amount: (data.total_amount ?? 0) / 100,
       currency: 'NPR',
-      paidAt: verified ? new Date() : undefined,
+      paidAt: mapped.verified ? new Date() : undefined,
       raw: data,
     };
   }
@@ -131,7 +155,7 @@ export class KhaltiGateway implements PaymentGatewayAdapter {
       purchase_order_name: 'Koseli Xpress Integration Test',
       customer_info: { name: 'Test', email: 'test@koselixpress.com', phone: '9800000000' },
     };
-    const res = await fetch(`${khaltiBaseUrl(isLive)}/epayment/initiate/`, {
+    const res = await fetch(`${khaltiBaseUrl(credentials, isLive)}/epayment/initiate/`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Key ${credentials.secretKey}` },
       body: JSON.stringify(payload),
