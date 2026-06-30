@@ -161,7 +161,9 @@ export default function APIIntegrationTab({ state, onUpdateState }: APIIntegrati
           products: state.products || [],
           deliveryDistricts: state.deliveryDistricts || [],
           coupons: state.coupons || [],
-          serviceFees: state.serviceFees || []
+          serviceFees: state.serviceFees || [],
+          deliveryGroups: state.deliveryGroups || [],
+          deliveryTimeSlotSettings: state.deliveryTimeSlotSettings
         })
       });
     } catch (e) {

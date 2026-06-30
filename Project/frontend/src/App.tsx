@@ -1016,7 +1016,11 @@ export default function App() {
       setToastType('success');
       setToastMessage('Saved successfully. Admin changes have been updated.');
     }
+<<<<<<< HEAD
     // Payment gateways sync only via Admin → Payment Gateways → Save (not on every keystroke)
+=======
+    // Payment gateways sync only via Admin Save & Sync, not on every keystroke.
+>>>>>>> 375657a434ddcfb90e922a02d2c2bf9819ec003d
     // Automatically synchronize catalog state to keep backend in lock-step
     fetch('/api/integrate/sync-catalog', {
       method: 'POST',
@@ -1027,7 +1031,9 @@ export default function App() {
         products: newState.products || [],
         deliveryDistricts: newState.deliveryDistricts || [],
         coupons: newState.coupons || [],
-        serviceFees: newState.serviceFees || []
+        serviceFees: newState.serviceFees || [],
+        deliveryGroups: newState.deliveryGroups || [],
+        deliveryTimeSlotSettings: newState.deliveryTimeSlotSettings
       })
     }).catch(err => console.error('Failed to sync catalog state to server:', err));
   };

@@ -8,7 +8,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { connectDB, isMongoConnected } from './config/db.js';
 import { getApiStore, saveApiStore } from './services/apiStoreService.js';
-import { getAppState, syncLocalAppStateToMongo } from './services/appStateService.js';
+import { getAppState, saveAppState, syncLocalAppStateToMongo } from './services/appStateService.js';
 import { seedPaymentGatewaysFromEnv } from './services/paymentGatewayService.js';
 import {
   getSuperAdminSeedStatus,
@@ -34,12 +34,255 @@ let syncedCatalog: {
   deliveryDistricts: any[];
   coupons: any[];
   serviceFees: any[];
+  deliveryGroups: any[];
+  deliveryTimeSlotSettings?: any;
 } = {
   products: [],
   deliveryDistricts: [],
   coupons: [],
-  serviceFees: []
+  serviceFees: [],
+  deliveryGroups: [],
+  deliveryTimeSlotSettings: undefined
 };
+
+const normalizeKey = (value: unknown) => String(value || '').trim().toLowerCase();
+const firstThreeWords = (value: string) => value.split(/\s+/).filter(Boolean).slice(0, 3).join(' ');
+
+function getApiCredentials(req: express.Request) {
+  return {
+    apiKey: req.headers['x-api-key'] || req.headers['X-API-Key'] || req.query.api_key,
+    apiSecret: req.headers['x-api-secret'] || req.headers['X-API-Secret'] || req.query.api_secret,
+    ip: req.headers['x-forwarded-for'] || req.ip || req.socket.remoteAddress || '127.0.0.1',
+  };
+}
+
+function isIpAllowed(user: any, ip: unknown) {
+  if (!user.allowedIps || !String(user.allowedIps).trim()) return true;
+  const clientIps = String(ip).split(',').map(item => item.trim());
+  const allowedList = String(user.allowedIps).split(',').map(item => item.trim()).filter(Boolean);
+  return clientIps.some(clientIp => allowedList.includes(clientIp)) || allowedList.includes('*') || allowedList.includes('any');
+}
+
+async function authenticateApiPartner(req: express.Request) {
+  const { apiKey, apiSecret, ip } = getApiCredentials(req);
+  const db = await getApiStore();
+  if (!apiKey || !apiSecret) {
+    return { db, ip, error: { status: 401, body: { error: 'Authentication required. Missing x-api-key or x-api-secret.' } } };
+  }
+
+  const user = db.users.find((u: any) => u.apiKey === apiKey && u.apiSecret === apiSecret) as any;
+  if (!user) {
+    return { db, ip, error: { status: 401, body: { error: 'Access Denied: Invalid API credentials.' } } };
+  }
+  if (user.status !== 'active') {
+    return { db, user, ip, error: { status: 403, body: { error: 'Authorization blocked. This API partner is disabled.' } } };
+  }
+  if (!isIpAllowed(user, ip)) {
+    return { db, user, ip, error: { status: 403, body: { error: `Security access blocked for IP ${String(ip).split(',')[0]}.` } } };
+  }
+
+  return { db, user, ip, error: null };
+}
+
+async function logApiResult(db: any, user: any, endpoint: string, req: express.Request, ip: unknown, status: number, body: any) {
+  const apiLog = {
+    id: 'log-' + Math.floor(100000 + Math.random() * 900000),
+    timestamp: new Date().toISOString(),
+    username: user?.username || 'unknown',
+    endpoint,
+    ipAddress: String(ip),
+    requestPayload: JSON.stringify({ query: req.query, body: req.body }),
+    responseStatus: status,
+    responseBody: JSON.stringify(body),
+    status: status >= 200 && status < 300 ? 'success' : 'error',
+  };
+  db.logs.unshift(apiLog);
+  if (db.logs.length > 500) db.logs.pop();
+  await saveApiStore(db);
+}
+
+function getPartnerDistricts(user: any) {
+  const allowed = user.allowedCities || [];
+  const hasWhitelist = Array.isArray(allowed) && allowed.length > 0;
+  return syncedCatalog.deliveryDistricts.filter((district: any) => {
+    if (!hasWhitelist) return true;
+    return allowed.some((allowedValue: string) =>
+      normalizeKey(allowedValue) === normalizeKey(district.id) ||
+      normalizeKey(allowedValue) === normalizeKey(district.name)
+    );
+  });
+}
+
+function resolveDistrictForPartner(user: any, locationIdOrName: string) {
+  return getPartnerDistricts(user).find((district: any) =>
+    normalizeKey(district.id) === normalizeKey(locationIdOrName) ||
+    normalizeKey(district.name) === normalizeKey(locationIdOrName)
+  );
+}
+
+function productBasePrice(product: any) {
+  return product.discountPrice && product.discountPrice > 0 && product.discountPrice < product.price
+    ? product.discountPrice
+    : product.price || 0;
+}
+
+function isProductActiveOrderable(product: any) {
+  if (!product || product.status !== 'active') return false;
+  if (product.allowOrderWhenOutOfStock) return true;
+  return Number(product.stock ?? product.stockCount ?? 0) > 0;
+}
+
+function getProductGroups(product: any) {
+  const groupIds = product.deliveryGroupIds || (product.deliveryGroupId ? [product.deliveryGroupId] : []);
+  return syncedCatalog.deliveryGroups.filter((group: any) => groupIds.includes(group.id));
+}
+
+function isProductAllowedForPartner(user: any, product: any) {
+  const allowed = user.allowedProducts || [];
+  if (!Array.isArray(allowed) || allowed.length === 0) return true;
+  return allowed.includes(product.id) || allowed.includes(product.sku);
+}
+
+function isProductAvailableForLocation(product: any, district: any) {
+  if (!district) return false;
+  const groups = getProductGroups(product);
+  if (groups.length === 0) return true;
+  return groups.some((group: any) => {
+    const locations = group.availableDistricts || [];
+    if (locations.length === 0) return true;
+    return locations.some((loc: string) => normalizeKey(loc) === normalizeKey(district.name) || normalizeKey(loc) === normalizeKey(district.id));
+  });
+}
+
+function getProductPreparationMinutes(product: any) {
+  const groups = getProductGroups(product);
+  if (groups.length === 0) {
+    return Number(syncedCatalog.deliveryTimeSlotSettings?.minPreparationHours || 0) * 60;
+  }
+  return Math.max(...groups.map((group: any) => Number(group.deliveryTimeMinutes || 0)));
+}
+
+function isDeliveryDateAvailable(product: any, deliveryDate: string) {
+  if (!deliveryDate) return true;
+  const target = new Date(`${deliveryDate}T23:59:59`);
+  if (Number.isNaN(target.getTime())) return false;
+  const earliest = new Date(Date.now() + getProductPreparationMinutes(product) * 60 * 1000);
+  return target.getTime() >= earliest.getTime();
+}
+
+function getEligibleProducts(user: any, district: any, deliveryDate?: string, keyword?: string) {
+  const term = normalizeKey(keyword);
+  return syncedCatalog.products.filter((product: any) => {
+    if (!isProductActiveOrderable(product)) return false;
+    if (!isProductAllowedForPartner(user, product)) return false;
+    if (!isProductAvailableForLocation(product, district)) return false;
+    if (!isDeliveryDateAvailable(product, deliveryDate || '')) return false;
+    if (!term) return true;
+    return [product.name, product.sku, product.slug, product.description, product.categoryId]
+      .some(value => normalizeKey(value).includes(term));
+  });
+}
+
+function calculateApiFinalPrice(user: any, body: any) {
+  const locationInput = body.location_id || body.delivery_city || body.delivery_location;
+  const district = resolveDistrictForPartner(user, locationInput);
+  if (!district) {
+    return { error: { status: 403, body: { error: 'Delivery location is not allowed for this API partner.' } } };
+  }
+
+  const deliveryDate = body.delivery_date || body.order?.delivery_date;
+  const reqItems = body.items;
+  if (!Array.isArray(reqItems) || reqItems.length === 0) {
+    return { error: { status: 400, body: { error: 'Include at least one item with product_id and quantity.' } } };
+  }
+
+  const validatedItems: any[] = [];
+  let subtotal = 0;
+  for (const item of reqItems) {
+    const productId = item.product_id || item.productId || item.sku;
+    const quantity = Math.max(1, parseInt(item.quantity, 10) || 1);
+    const product = syncedCatalog.products.find((p: any) => p.id === productId || p.sku === productId);
+    if (!product || !getEligibleProducts(user, district, deliveryDate).some((p: any) => p.id === product.id)) {
+      return { error: { status: 403, body: { error: `Product '${productId}' is not available for this partner, location, or date.` } } };
+    }
+
+    let unitPrice = productBasePrice(product);
+    const matchedVariations: any[] = [];
+    if (Array.isArray(item.variations)) {
+      for (const reqVar of item.variations) {
+        const catalogVar = product.variations?.find((v: any) => normalizeKey(v.name) === normalizeKey(reqVar.name));
+        const catalogOpt = catalogVar?.options?.find((o: any) => normalizeKey(o.value) === normalizeKey(reqVar.value));
+        if (catalogOpt) {
+          unitPrice += Number(catalogOpt.priceAdjustment || 0);
+          matchedVariations.push({ name: catalogVar.name, value: catalogOpt.value, priceAdjustment: Number(catalogOpt.priceAdjustment || 0) });
+        }
+      }
+    }
+
+    subtotal += unitPrice * quantity;
+    validatedItems.push({
+      productId: product.id,
+      product_id: product.id,
+      sku: product.sku,
+      productName: product.name,
+      displayName: `${firstThreeWords(product.name)} — NPR ${unitPrice.toLocaleString()}`,
+      quantity,
+      selectedPrice: unitPrice,
+      unit_price: unitPrice,
+      total_price: unitPrice * quantity,
+      selectedVariations: matchedVariations,
+      variations: matchedVariations,
+    });
+  }
+
+  let serviceFeeAmount = 0;
+  const selectedAddons = body.service_addons || body.additional?.service_addons || [];
+  const serviceFeeDetails: any[] = [];
+  if (Array.isArray(selectedAddons)) {
+    selectedAddons.forEach((addonId: string) => {
+      const fee = syncedCatalog.serviceFees.find((f: any) => f.id === addonId && f.isActive);
+      if (fee) {
+        serviceFeeAmount += Number(fee.feeAmountNPR || 0);
+        serviceFeeDetails.push({ id: fee.id, name: fee.name, amount: Number(fee.feeAmountNPR || 0) });
+      }
+    });
+  }
+
+  let discountAmount = 0;
+  const couponCode = body.coupon || body.additional?.coupon;
+  if (couponCode) {
+    const coupon = syncedCatalog.coupons.find((c: any) => normalizeKey(c.code) === normalizeKey(couponCode) && c.isActive);
+    if (coupon && subtotal >= Number(coupon.minOrderValue || 0)) {
+      discountAmount = coupon.discountType === 'percentage' ? (subtotal * Number(coupon.value || 0)) / 100 : Number(coupon.value || 0);
+    }
+  }
+
+  const deliveryFee = Number(district.chargeNPR || 0);
+  const timeSlotCharge = 0;
+  const taxAmount = 0;
+  const finalAmount = Math.max(0, subtotal + deliveryFee + serviceFeeAmount + timeSlotCharge + taxAmount - discountAmount);
+
+  return {
+    district,
+    deliveryDate,
+    items: validatedItems,
+    pricing: {
+      subtotal,
+      delivery_fee: deliveryFee,
+      additional_charges: serviceFeeAmount + timeSlotCharge + taxAmount,
+      service_fee_amount: serviceFeeAmount,
+      time_slot_charge: timeSlotCharge,
+      tax_amount: taxAmount,
+      discount_amount: discountAmount,
+      final_payable_amount: finalAmount,
+      grand_total: finalAmount,
+      currency: 'NPR',
+    },
+    serviceFeeDetails,
+    couponCode,
+    error: null,
+  };
+}
 
 
 // Initialize Gemini SDK with telemetry header
@@ -578,14 +821,88 @@ app.post('/api/integrate/save', async (req, res) => {
 
 // Synchronize frontend product catalog, currency, and coupons on backend restart or load
 app.post('/api/integrate/sync-catalog', (req, res) => {
-  const { products, deliveryDistricts, coupons, serviceFees } = req.body;
+  const { products, deliveryDistricts, coupons, serviceFees, deliveryGroups, deliveryTimeSlotSettings } = req.body;
   syncedCatalog = {
     products: products || [],
     deliveryDistricts: deliveryDistricts || [],
     coupons: coupons || [],
-    serviceFees: serviceFees || []
+    serviceFees: serviceFees || [],
+    deliveryGroups: deliveryGroups || [],
+    deliveryTimeSlotSettings
   };
   res.json({ success: true, count: syncedCatalog.products.length });
+});
+
+app.get('/api/v1/locations', async (req, res) => {
+  const auth = await authenticateApiPartner(req);
+  if (auth.error) {
+    await logApiResult(auth.db, auth.user, 'GET /api/v1/locations', req, auth.ip, auth.error.status, auth.error.body);
+    return res.status(auth.error.status).json(auth.error.body);
+  }
+
+  const locations = getPartnerDistricts(auth.user).map((district: any) => ({
+    id: district.id,
+    name: district.name,
+    delivery_fee_npr: Number(district.chargeNPR || 0),
+  }));
+  const body = { success: true, partner: auth.user.integrationName, locations };
+  await logApiResult(auth.db, auth.user, 'GET /api/v1/locations', req, auth.ip, 200, body);
+  return res.json(body);
+});
+
+app.get('/api/v1/available-dates', async (req, res) => {
+  const auth = await authenticateApiPartner(req);
+  if (auth.error) {
+    await logApiResult(auth.db, auth.user, 'GET /api/v1/available-dates', req, auth.ip, auth.error.status, auth.error.body);
+    return res.status(auth.error.status).json(auth.error.body);
+  }
+
+  const district = resolveDistrictForPartner(auth.user, String(req.query.location_id || req.query.delivery_city || ''));
+  if (!district) {
+    const body = { error: 'Delivery location is not allowed for this API partner.' };
+    await logApiResult(auth.db, auth.user, 'GET /api/v1/available-dates', req, auth.ip, 403, body);
+    return res.status(403).json(body);
+  }
+
+  const dates = Array.from({ length: 21 }).map((_, idx) => {
+    const date = new Date();
+    date.setDate(date.getDate() + idx);
+    const iso = date.toISOString().slice(0, 10);
+    const anyProductAvailable = getEligibleProducts(auth.user, district, iso).length > 0;
+    return { date: iso, available: anyProductAvailable };
+  }).filter(entry => entry.available);
+
+  const body = { success: true, location: { id: district.id, name: district.name }, dates };
+  await logApiResult(auth.db, auth.user, 'GET /api/v1/available-dates', req, auth.ip, 200, body);
+  return res.json(body);
+});
+
+app.get('/api/v1/product-search', async (req, res) => {
+  const auth = await authenticateApiPartner(req);
+  if (auth.error) {
+    await logApiResult(auth.db, auth.user, 'GET /api/v1/product-search', req, auth.ip, auth.error.status, auth.error.body);
+    return res.status(auth.error.status).json(auth.error.body);
+  }
+
+  const district = resolveDistrictForPartner(auth.user, String(req.query.location_id || req.query.delivery_city || ''));
+  if (!district) {
+    const body = { error: 'Delivery location is not allowed for this API partner.' };
+    await logApiResult(auth.db, auth.user, 'GET /api/v1/product-search', req, auth.ip, 403, body);
+    return res.status(403).json(body);
+  }
+
+  const products = getEligibleProducts(auth.user, district, String(req.query.delivery_date || ''), String(req.query.q || req.query.keyword || ''))
+    .map((product: any) => ({
+      id: product.id,
+      sku: product.sku,
+      name: product.name,
+      display: `${firstThreeWords(product.name)} — NPR ${productBasePrice(product).toLocaleString()}`,
+      price_npr: productBasePrice(product),
+    }));
+
+  const body = { success: true, total_products: products.length, products };
+  await logApiResult(auth.db, auth.user, 'GET /api/v1/product-search', req, auth.ip, 200, body);
+  return res.json(body);
 });
 
 // GET PRODUCTS API: Fetch whitelisted product catalog with live prices for B2B API Partners
@@ -622,7 +939,7 @@ app.get('/api/v1/products', async (req, res) => {
     return logAndResponse(401, { error: 'Authentication required. Missing x-api-key or x-api-secret headers or api_key / api_secret query params.' });
   }
 
-  const user = db.users.find((u: any) => u.apiKey === apiKey && u.apiSecret === apiSecret);
+  const user = db.users.find((u: any) => u.apiKey === apiKey && u.apiSecret === apiSecret) as any;
   if (!user) {
     return logAndResponse(401, { error: 'Access Denied: Invalid B2B API credentials.' });
   }
@@ -633,10 +950,17 @@ app.get('/api/v1/products', async (req, res) => {
     return logAndResponse(403, { error: 'Authorization Blocked: This integrated API credential is disabled.' });
   }
 
-  // Filter whitelisted products
-  const whitelistedProducts = user.allowedProducts && user.allowedProducts.length > 0 
-    ? syncedCatalog.products.filter((p: any) => user.allowedProducts.includes(p.id) || user.allowedProducts.includes(p.sku))
-    : syncedCatalog.products;
+  // Filter whitelisted, active/orderable products. Location/date query filters are optional on this legacy catalog endpoint.
+  const requestedDistrict = req.query.location_id || req.query.delivery_city
+    ? resolveDistrictForPartner(user, String(req.query.location_id || req.query.delivery_city))
+    : null;
+  const whitelistedProducts = syncedCatalog.products.filter((p: any) => {
+    if (!isProductActiveOrderable(p)) return false;
+    if (!isProductAllowedForPartner(user, p)) return false;
+    if (requestedDistrict && !isProductAvailableForLocation(p, requestedDistrict)) return false;
+    if (requestedDistrict && req.query.delivery_date && !isDeliveryDateAvailable(p, String(req.query.delivery_date))) return false;
+    return true;
+  });
 
   // Format response details dynamically to return precise updated pricing attributes 
   const formattedProducts = whitelistedProducts.map((p: any) => {
@@ -705,7 +1029,7 @@ app.post('/api/v1/check-price', async (req, res) => {
     return logAndResponse(401, { error: 'Authentication required. Missing x-api-key or x-api-secret.' });
   }
 
-  const user = db.users.find((u: any) => u.apiKey === apiKey && u.apiSecret === apiSecret);
+  const user = db.users.find((u: any) => u.apiKey === apiKey && u.apiSecret === apiSecret) as any;
   if (!user) {
     return logAndResponse(401, { error: 'Access Denied: Invalid integration keys.' });
   }
@@ -830,6 +1154,36 @@ app.post('/api/v1/check-price', async (req, res) => {
   });
 });
 
+// FINAL PRICE API: strict source-of-truth pricing after location/date/product selection
+app.post('/api/v1/final-price', async (req, res) => {
+  const auth = await authenticateApiPartner(req);
+  if (auth.error) {
+    await logApiResult(auth.db, auth.user, 'POST /api/v1/final-price', req, auth.ip, auth.error.status, auth.error.body);
+    return res.status(auth.error.status).json(auth.error.body);
+  }
+
+  const result = calculateApiFinalPrice(auth.user, req.body);
+  if (result.error) {
+    await logApiResult(auth.db, auth.user, 'POST /api/v1/final-price', req, auth.ip, result.error.status, result.error.body);
+    return res.status(result.error.status).json(result.error.body);
+  }
+
+  const body = {
+    success: true,
+    currency: 'NPR',
+    location: { id: result.district.id, name: result.district.name },
+    delivery_date: result.deliveryDate,
+    items: result.items,
+    pricing: result.pricing,
+    subtotal: result.pricing.subtotal,
+    delivery_fee: result.pricing.delivery_fee,
+    additional_charges: result.pricing.additional_charges,
+    final_payable_amount: result.pricing.final_payable_amount,
+  };
+  await logApiResult(auth.db, auth.user, 'POST /api/v1/final-price', req, auth.ip, 200, body);
+  return res.json(body);
+});
+
 // SUBMIT ORDER API: Main external gateway for third-party systems
 app.post('/api/v1/orders', async (req, res) => {
   const apiKey = req.headers['x-api-key'] || req.headers['X-API-Key'];
@@ -872,7 +1226,7 @@ app.post('/api/v1/orders', async (req, res) => {
     return logAndResponse(401, { error: 'Authentication required. Missing x-api-key or x-api-secret headers.' });
   }
 
-  const user = db.users.find((u: any) => u.apiKey === apiKey && u.apiSecret === apiSecret);
+  const user = db.users.find((u: any) => u.apiKey === apiKey && u.apiSecret === apiSecret) as any;
   if (!user) {
     return logAndResponse(401, { error: 'Access Denied: Invalid x-api-key or x-api-secret.' });
   }
@@ -943,6 +1297,87 @@ app.post('/api/v1/orders', async (req, res) => {
   // 3. Currency Validation (NPR check)
   if (req.body.currency && req.body.currency.toUpperCase() !== 'NPR') {
     return logAndResponse(400, { error: 'Unsupported Currency: This API portal exclusively trades in Nepalese Rupees (NPR).' });
+  }
+
+  {
+  const finalPrice = calculateApiFinalPrice(user, {
+    ...req.body,
+    delivery_city: values.delivery_city,
+    delivery_date: values.delivery_date,
+    service_addons: values.service_addons,
+    coupon: values.coupon,
+  });
+  if (finalPrice.error) {
+    return logAndResponse(finalPrice.error.status, finalPrice.error.body);
+  }
+
+  const orderId = 'ord-api-' + Math.floor(100000 + Date.now() % 100000);
+  const refId = 'KO-API-' + Math.floor(100000 + Math.random() * 900000);
+  const newOrder: any = {
+    id: orderId,
+    refId,
+    apiPartnerId: user.id,
+    apiPartnerUsername: user.username,
+    customerName: values.sender_name || 'API Partner',
+    customerEmail: values.sender_email || user.email,
+    customerPhone: values.sender_mobile || '+9779800000000',
+    shippingAddress: values.delivery_address || 'As specified',
+    senderName: values.sender_name,
+    senderEmail: values.sender_email,
+    senderPhone: values.sender_mobile,
+    receiverName: values.receiver_name,
+    receiverPhone: values.receiver_mobile,
+    deliveryDistrict: finalPrice.district.name,
+    deliveryAddress: values.delivery_address,
+    orderNote: `API placed order. Occasion: ${values.occasion || 'None'}. Gift message: ${values.gift_message || 'None'}. Special Instructions: ${values.instructions || 'None'}. Internal Notes: ${values.internal_notes || ''}`,
+    preferredDeliveryDate: finalPrice.deliveryDate,
+    deliveryChargeAmount: finalPrice.pricing.delivery_fee,
+    items: finalPrice.items.map((item: any) => ({
+      productId: item.productId,
+      quantity: item.quantity,
+      selectedPrice: item.selectedPrice,
+      productName: item.productName,
+      customMessage: values.gift_message || undefined,
+      selectedVariations: item.selectedVariations,
+    })),
+    additionalServiceFeeAdded: finalPrice.serviceFeeDetails.map((fee: any) => fee.name).join(', ') || null,
+    additionalServiceFeeAmount: finalPrice.pricing.service_fee_amount,
+    serviceFeeDetails: finalPrice.serviceFeeDetails,
+    currency: 'NPR',
+    exchangeRate: 1.0,
+    totalAmount: finalPrice.pricing.final_payable_amount,
+    totalAmountBase: finalPrice.pricing.final_payable_amount,
+    couponCodeUsed: finalPrice.couponCode,
+    paymentMethod: 'API Partner Pending Payment',
+    status: 'pending',
+    paymentStatus: 'pending',
+    createdAt: new Date().toISOString(),
+    selectedTimeSlot: values.delivery_slot,
+    timeSlotChargeAmount: finalPrice.pricing.time_slot_charge,
+  };
+
+  db.apiOrders.unshift(newOrder);
+  const appState = await getAppState();
+  const existingOrders = Array.isArray((appState as any).orders) ? (appState as any).orders : [];
+  await saveApiStore(db);
+  if (appState) {
+    await saveAppState({
+    ...(appState as any),
+    orders: [newOrder, ...existingOrders.filter((order: any) => order.refId !== refId && order.id !== orderId)],
+    } as any);
+  }
+
+  return logAndResponse(201, {
+    success: true,
+    message: 'Order confirmed and created. Status: Pending Payment.',
+    order_id: orderId,
+    tracking_ref: refId,
+    payment_status: 'Pending Payment',
+    currency: 'NPR',
+    pricing: finalPrice.pricing,
+    final_payable_amount: finalPrice.pricing.final_payable_amount,
+    items: finalPrice.items,
+  });
   }
 
   // 4. Validate Location Restriction
@@ -1190,6 +1625,127 @@ app.post('/api/v1/orders', async (req, res) => {
       grand_total_npr: grandTotal
     }
   });
+});
+
+app.post('/api/v1/existing-orders/price', async (req, res) => {
+  const auth = await authenticateApiPartner(req);
+  if (auth.error) {
+    await logApiResult(auth.db, auth.user, 'POST /api/v1/existing-orders/price', req, auth.ip, auth.error.status, auth.error.body);
+    return res.status(auth.error.status).json(auth.error.body);
+  }
+
+  const orderId = req.body.order_id || req.body.orderId || req.body.ref_id;
+  const receiverName = normalizeKey(req.body.receiver_name || req.body.receiver?.name);
+  const receiverMobile = normalizeKey(req.body.receiver_mobile || req.body.receiver?.mobile);
+  const appState = await getAppState();
+  const orders = Array.isArray((appState as any)?.orders) ? (appState as any).orders : [];
+  const order = orders.find((entry: any) => entry.id === orderId || entry.refId === orderId);
+
+  if (!order) {
+    const body = { error: 'Order not found.' };
+    await logApiResult(auth.db, auth.user, 'POST /api/v1/existing-orders/price', req, auth.ip, 404, body);
+    return res.status(404).json(body);
+  }
+  if (order.paymentStatus === 'paid') {
+    const body = { error: 'This order payment is already complete.' };
+    await logApiResult(auth.db, auth.user, 'POST /api/v1/existing-orders/price', req, auth.ip, 409, body);
+    return res.status(409).json(body);
+  }
+  if (
+    receiverName &&
+    normalizeKey(order.receiverName || order.customerName) !== receiverName
+  ) {
+    const body = { error: 'Receiver name does not match this order.' };
+    await logApiResult(auth.db, auth.user, 'POST /api/v1/existing-orders/price', req, auth.ip, 403, body);
+    return res.status(403).json(body);
+  }
+  if (
+    receiverMobile &&
+    normalizeKey(order.receiverPhone || order.customerPhone) !== receiverMobile
+  ) {
+    const body = { error: 'Receiver mobile does not match this order.' };
+    await logApiResult(auth.db, auth.user, 'POST /api/v1/existing-orders/price', req, auth.ip, 403, body);
+    return res.status(403).json(body);
+  }
+
+  const orderAmount = Number(order.totalAmountBase || order.totalAmount || 0);
+  const deliveryFee = Number(order.deliveryChargeAmount || 0);
+  const additionalCharges = Number(order.additionalServiceFeeAmount || 0) + Number(order.timeSlotChargeAmount || 0);
+  const body = {
+    success: true,
+    order_id: order.id,
+    tracking_ref: order.refId,
+    currency: 'NPR',
+    order_amount: orderAmount,
+    delivery_fee: deliveryFee,
+    additional_charges: additionalCharges,
+    final_pending_amount: orderAmount,
+  };
+  await logApiResult(auth.db, auth.user, 'POST /api/v1/existing-orders/price', req, auth.ip, 200, body);
+  return res.json(body);
+});
+
+app.post('/api/v1/existing-orders/confirm-payment', async (req, res) => {
+  const auth = await authenticateApiPartner(req);
+  if (auth.error) {
+    await logApiResult(auth.db, auth.user, 'POST /api/v1/existing-orders/confirm-payment', req, auth.ip, auth.error.status, auth.error.body);
+    return res.status(auth.error.status).json(auth.error.body);
+  }
+
+  const orderId = req.body.order_id || req.body.orderId || req.body.ref_id;
+  const receiverName = normalizeKey(req.body.receiver_name || req.body.receiver?.name);
+  const receiverMobile = normalizeKey(req.body.receiver_mobile || req.body.receiver?.mobile);
+  const appState = await getAppState();
+  const orders = Array.isArray((appState as any)?.orders) ? (appState as any).orders : [];
+  const order = orders.find((entry: any) => entry.id === orderId || entry.refId === orderId);
+
+  if (!order) {
+    const body = { error: 'Order not found.' };
+    await logApiResult(auth.db, auth.user, 'POST /api/v1/existing-orders/confirm-payment', req, auth.ip, 404, body);
+    return res.status(404).json(body);
+  }
+  if (order.paymentStatus === 'paid') {
+    const body = { error: 'This order payment is already complete.' };
+    await logApiResult(auth.db, auth.user, 'POST /api/v1/existing-orders/confirm-payment', req, auth.ip, 409, body);
+    return res.status(409).json(body);
+  }
+  if (receiverName && normalizeKey(order.receiverName || order.customerName) !== receiverName) {
+    const body = { error: 'Receiver name does not match this order.' };
+    await logApiResult(auth.db, auth.user, 'POST /api/v1/existing-orders/confirm-payment', req, auth.ip, 403, body);
+    return res.status(403).json(body);
+  }
+  if (receiverMobile && normalizeKey(order.receiverPhone || order.customerPhone) !== receiverMobile) {
+    const body = { error: 'Receiver mobile does not match this order.' };
+    await logApiResult(auth.db, auth.user, 'POST /api/v1/existing-orders/confirm-payment', req, auth.ip, 403, body);
+    return res.status(403).json(body);
+  }
+
+  const updatedOrder = {
+    ...order,
+    paymentStatus: 'paid',
+    status: 'processing',
+    apiPartnerId: auth.user.id,
+    apiPartnerUsername: auth.user.username,
+    paymentMethod: req.body.payment_method || 'API Partner Payment',
+    paymentCompletedAt: new Date().toISOString(),
+    apiPaymentReference: req.body.payment_reference || req.body.transaction_id || undefined,
+  };
+  const updatedOrders = orders.map((entry: any) => (entry.id === order.id || entry.refId === order.refId ? updatedOrder : entry));
+  if (appState) {
+    await saveAppState({ ...(appState as any), orders: updatedOrders });
+  }
+
+  const body = {
+    success: true,
+    message: 'Payment complete. Order will continue normal fulfillment.',
+    order_id: updatedOrder.id,
+    tracking_ref: updatedOrder.refId,
+    status: 'Payment Complete',
+    payment_status: 'paid',
+    api_partner: auth.user.username,
+  };
+  await logApiResult(auth.db, auth.user, 'POST /api/v1/existing-orders/confirm-payment', req, auth.ip, 200, body);
+  return res.json(body);
 });
 
 async function start() {
