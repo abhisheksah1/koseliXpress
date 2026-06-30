@@ -1,6 +1,7 @@
 import React, { useCallback, useState, useEffect } from 'react';
 import { DB_KEY, loadDbState, saveDbState } from './db';
 import { DatabaseState, CurrencySettings, CartItem, Product, ProductStatus } from './types';
+import { createDefaultState } from './defaultState';
 import Header from './components/Customer/Header';
 import Footer from './components/Customer/Footer';
 import ProductCard from './components/Customer/ProductCard';
@@ -27,6 +28,39 @@ import {
   loadPendingRedirectCheckout,
 } from './utils/pendingCheckout';
 import { clearPendingKhaltiCheckout, loadPendingKhaltiCheckout } from './utils/khaltiCheckout';
+
+const fallbackCurrency: CurrencySettings = { code: 'NPR', symbol: 'Rs.', rateToNPR: 1.0, isDefault: true };
+
+function normalizeDatabaseState(rawState: DatabaseState): DatabaseState {
+  const defaults = createDefaultState();
+  const incoming = (rawState || {}) as Partial<DatabaseState>;
+
+  return {
+    ...defaults,
+    ...incoming,
+    users: Array.isArray(incoming.users) ? incoming.users : defaults.users,
+    categories: Array.isArray(incoming.categories) ? incoming.categories : defaults.categories,
+    brands: Array.isArray(incoming.brands) ? incoming.brands : defaults.brands,
+    products: Array.isArray(incoming.products) ? incoming.products : defaults.products,
+    inventoryLogs: Array.isArray(incoming.inventoryLogs) ? incoming.inventoryLogs : defaults.inventoryLogs,
+    reviews: Array.isArray(incoming.reviews) ? incoming.reviews : defaults.reviews,
+    coupons: Array.isArray(incoming.coupons) ? incoming.coupons : defaults.coupons,
+    leads: Array.isArray(incoming.leads) ? incoming.leads : defaults.leads,
+    orders: Array.isArray(incoming.orders) ? incoming.orders : defaults.orders,
+    currencies: Array.isArray(incoming.currencies) && incoming.currencies.length > 0 ? incoming.currencies : defaults.currencies,
+    serviceFees: Array.isArray(incoming.serviceFees) ? incoming.serviceFees : defaults.serviceFees,
+    pages: Array.isArray(incoming.pages) ? incoming.pages : defaults.pages,
+    deliveryDistricts: Array.isArray(incoming.deliveryDistricts) ? incoming.deliveryDistricts : defaults.deliveryDistricts,
+    deliveryGroups: Array.isArray(incoming.deliveryGroups) ? incoming.deliveryGroups : defaults.deliveryGroups,
+    paymentGateways: Array.isArray(incoming.paymentGateways) ? incoming.paymentGateways : defaults.paymentGateways,
+    supportChats: Array.isArray(incoming.supportChats) ? incoming.supportChats : defaults.supportChats,
+    staffRoleCategories: Array.isArray(incoming.staffRoleCategories) && incoming.staffRoleCategories.length > 0 ? incoming.staffRoleCategories : defaults.staffRoleCategories,
+    plugins: { ...defaults.plugins, ...(incoming.plugins || {}) },
+    appearance: { ...defaults.appearance, ...(incoming.appearance || {}) },
+    store: { ...defaults.store, ...(incoming.store || {}) },
+    rolePermissions: incoming.rolePermissions || defaults.rolePermissions,
+  };
+}
 
 export default function App() {
   const [dbState, setDbState] = useState<DatabaseState | null>(null);
@@ -55,13 +89,14 @@ export default function App() {
   const [customerProductPage, setCustomerProductPage] = useState<number>(1);
 
   const applyDatabaseState = useCallback((freshDb: DatabaseState) => {
-    setDbState(freshDb);
+    const normalizedDb = normalizeDatabaseState(freshDb);
+    setDbState(normalizedDb);
     setSelectedCurrency((current) => {
       const preferredCode = current?.code || 'NPR';
       return (
-        freshDb.currencies.find(c => c.code === preferredCode) ||
-        freshDb.currencies.find(c => c.code === 'NPR') ||
-        { code: 'NPR', symbol: 'Rs.', rateToNPR: 1.0, isDefault: true }
+        normalizedDb.currencies.find(c => c.code === preferredCode) ||
+        normalizedDb.currencies.find(c => c.code === 'NPR') ||
+        fallbackCurrency
       );
     });
   }, []);
@@ -977,6 +1012,10 @@ export default function App() {
     setDbState(newState);
     saveDbState(newState);
     window.dispatchEvent(new CustomEvent('koseli-store-updated', { detail: newState }));
+    if (isAdminApp) {
+      setToastType('success');
+      setToastMessage('Saved successfully. Admin changes have been updated.');
+    }
     if (newState.paymentGateways) {
       fetch('/api/payment/sync-gateways', {
         method: 'POST',
