@@ -52,6 +52,12 @@ export function createDefaultState(): DatabaseState {
       aiChatScheduleEnabled: false,
       aiChatStartTime: '09:00',
       aiChatEndTime: '18:00',
+      aiSupportKnowledge: [
+        'Koseli Xpress is a premium gifting platform in Nepal.',
+        'We help customers order cakes, flowers, hampers, chocolates, personalized gifts, and special occasion gifts.',
+        'For unclear, sensitive, payment, refund, complaint, or custom order questions, guide the customer to WhatsApp human support.',
+      ].join('\n'),
+      aiSupportFallbackInstruction: 'If the customer asks something not covered by the support knowledge, politely ask them to contact human support on WhatsApp.',
     },
     appearance: {
       themeMode: 'light',
@@ -100,6 +106,7 @@ export function createDefaultState(): DatabaseState {
       geoRegion: 'NP-BA',
       geoPlacename: 'Kathmandu, Nepal',
       geoPosition: '27.717244;85.324060',
+      landingPageSlug: 'home',
     },
     serviceFees: [],
     pages: [],

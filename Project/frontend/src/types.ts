@@ -389,6 +389,8 @@ export interface PluginSettings {
   aiChatScheduleEnabled?: boolean;
   aiChatStartTime?: string;
   aiChatEndTime?: string;
+  aiSupportKnowledge?: string;
+  aiSupportFallbackInstruction?: string;
 }
 
 export interface AppearanceSettings {
@@ -456,6 +458,7 @@ export interface StoreSettings {
   geoRegion?: string;       // e.g. "NP-BA" (Bagmati, Nepal)
   geoPlacename?: string;    // e.g. "Kathmandu, Lalitpur, Bhaktapur"
   geoPosition?: string;     // e.g. "27.717244;85.324060"
+  landingPageSlug?: string; // page builder slug used for the public root path
 }
 
 export interface ServiceFee {

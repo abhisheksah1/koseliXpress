@@ -729,7 +729,7 @@ app.post('/api/mail/send', async (req, res) => {
 // DYNAMIC AI CUSTOMER SUPPORT CHAT ENDPOINT
 // ==========================================
 app.post('/api/ai-chat', async (req, res) => {
-  const { messages, whatsappNumber } = req.body;
+  const { messages, whatsappNumber, supportKnowledge, fallbackInstruction } = req.body;
   if (!messages || !Array.isArray(messages)) {
     return res.status(400).json({ error: 'Missing or invalid messages parameter.' });
   }
@@ -737,12 +737,28 @@ app.post('/api/ai-chat', async (req, res) => {
   const activeWhatsapp = whatsappNumber || '+977 9851012345';
 
   try {
+    const appState = await getAppState();
+    const storedPlugins = ((appState as any)?.plugins || {}) as any;
+    const adminSupportKnowledge = String(supportKnowledge || storedPlugins.aiSupportKnowledge || '').trim();
+    const adminFallbackInstruction = String(
+      fallbackInstruction ||
+      storedPlugins.aiSupportFallbackInstruction ||
+      'If the answer is not covered by the support knowledge, politely hand off to human support on WhatsApp.'
+    ).trim();
+
     // Collect active products for grounding with ID mapping
     const productsContext = (syncedCatalog.products || [])
-      .filter((p: any) => p.status === 'ACTIVE' || p.status === 'Active' || !p.status)
+      .filter((p: any) => String(p.status || 'active').toLowerCase() === 'active')
       .slice(0, 20)
       .map((p: any) => `- ${p.name} (ID: "${p.id}", Price: NPR ${p.price}): ${p.description || ''}`)
       .join('\n');
+
+    const defaultPolicies = [
+      'Delivery within Kathmandu Valley (Kathmandu, Lalitpur, Bhaktapur) in 3-4 hours.',
+      'Cakes must be ordered before 1:00 PM for same-day delivery.',
+      'Supports international cards (Visa, MasterCard, Amex) and local wallets (eSewa, Khalti).',
+    ].join('\n');
+    const effectiveSupportKnowledge = adminSupportKnowledge || defaultPolicies;
 
     const systemPrompt = `You are CSR- AI, the elegant, sophisticated, polite, and helpful AI Customer Support Agent for **Koseli Xpress**, Nepal's premium e-commerce gift platform.
 
@@ -757,15 +773,21 @@ MULTI-LANGUAGE & REPLY-IN-KIND REQUIREMENT:
 - ALWAYS REPLY IN THE SAME LANGUAGE AS THE CUSTOMER. If they ask in Nepali, reply in Nepali. If they ask in Hindi, reply in Hindi. If they ask in any other language, reply in that exact language.
 - Keep the tone polite, premium, and culturally tailored for that language (e.g. use respectful terms like "🙏 नमस्ते", "जी", etc.).
 
+ADMIN-PROVIDED CSR-AI KNOWLEDGE BASE (SOURCE OF TRUTH):
+${effectiveSupportKnowledge}
+
+KNOWLEDGE RULES:
+- Treat the admin-provided CSR-AI knowledge base above as the primary source of truth.
+- If the customer's question matches any information in the knowledge base, answer directly from that information.
+- Use the knowledge base when answering delivery, payment, refund, custom order, availability, support, and policy questions.
+- Do not use old default assumptions when admin knowledge is provided.
+- Do not invent business policies, delivery promises, refund rules, payment rules, or guarantees that are not present in the knowledge base or active product catalog.
+- Fallback / handoff instruction from admin: ${adminFallbackInstruction}
+
 NOT UNDERSTANDING & HUMAN SUPPORT HANDOFF (CRITICAL):
 - If you do not understand a question, do not have confidence in the details, or are asked complex/unrelated questions, you MUST IMMEDIATELY hand off the customer to our human support team.
 - To hand off to human support, you MUST include the verbatim tag [whatsapp-link] in your message so they can connect with a live assistant instantly.
 - Example handoff message: "I'm sorry, I couldn't quite understand your request. Please connect with our human support manager on WhatsApp here: [whatsapp-link]" or "म तपाईंको प्रश्न स्पष्टसँग बुझ्न सकिन। कृपया व्हाट्सएपमा हाम्रो मानव ग्राहक सहायता टोलीसँग जोडिनुहोस्: [whatsapp-link]"
-
-Core Store Policies:
-- Delivery within Kathmandu Valley (Kathmandu, Lalitpur, Bhaktapur) in 3-4 hours.
-- Cakes must be ordered before 1:00 PM for same-day delivery.
-- Supports international cards (Visa, MasterCard, Amex) and local wallets (eSewa, Khalti).
 
 Active Product Catalog:
 ${productsContext || '- 12 Red Roses Premium Round Basket (ID: "p1", Price: NPR 1500)\n- Boutique Chocolate Truffle Cake (1 Lbs) (ID: "p2", Price: NPR 1800)'}
@@ -776,10 +798,18 @@ If someone is buying or paying for any product:
 2. You MUST append this exact tag at the end: [instant-checkout:PRODUCT_ID]
 Example: "Certainly! I have generated your secure order right here. Please tap the payment card below to complete checkout: [instant-checkout:p2]"`;
 
-    const contents = messages.map((m: any) => ({
+    const contents = [
+      {
+        role: 'user',
+        parts: [{
+          text: `Before answering the customer, use this CSR-AI admin knowledge as the trusted source:\n${effectiveSupportKnowledge}\n\nFallback rule: ${adminFallbackInstruction}`
+        }]
+      },
+      ...messages.map((m: any) => ({
       role: m.role === 'assistant' || m.role === 'model' ? 'model' : 'user',
       parts: [{ text: m.content }]
-    }));
+      }))
+    ];
 
     const response = await ai.models.generateContent({
       model: 'gemini-3.5-flash',

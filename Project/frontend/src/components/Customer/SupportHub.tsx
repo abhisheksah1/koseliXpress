@@ -199,6 +199,8 @@ export default function SupportHub({ state, onUpdateState, onAddToCart, onOpenCa
         },
         body: JSON.stringify({
           whatsappNumber: whatsappNum,
+          supportKnowledge: state.plugins?.aiSupportKnowledge || '',
+          fallbackInstruction: state.plugins?.aiSupportFallbackInstruction || '',
           messages: updatedMessages.map(m => ({
             role: m.role,
             content: m.content

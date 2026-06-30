@@ -2577,6 +2577,47 @@ export default function SettingsTab({ state, onUpdateState }: SettingsTabProps) 
                 : '.'}
           </div>
 
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className="lg:col-span-2">
+              <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">
+                CSR-AI Support Knowledge / Information
+              </label>
+              <textarea
+                rows={10}
+                className="w-full p-3 border border-slate-200 bg-white rounded-xl text-xs font-mono leading-relaxed focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300"
+                value={pluginForm.aiSupportKnowledge || ''}
+                onChange={(e) => setPluginForm({ ...pluginForm, aiSupportKnowledge: e.target.value })}
+                placeholder={[
+                  'Add information the CSR-AI must use when answering customers.',
+                  'Example:',
+                  '- Same-day cake order cutoff is 1:00 PM.',
+                  '- Kathmandu Valley delivery normally takes 3-4 hours.',
+                  '- For refunds, ask customer to contact WhatsApp support.',
+                  '- Custom hampers are available after human confirmation.',
+                ].join('\n')}
+              />
+              <p className="text-[10px] text-slate-400 font-semibold mt-1">
+                Keep one rule per line for best results. This becomes the trusted knowledge base for customer support answers.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">
+                Fallback / Handoff Instruction
+              </label>
+              <textarea
+                rows={10}
+                className="w-full p-3 border border-slate-200 bg-white rounded-xl text-xs font-mono leading-relaxed focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300"
+                value={pluginForm.aiSupportFallbackInstruction || ''}
+                onChange={(e) => setPluginForm({ ...pluginForm, aiSupportFallbackInstruction: e.target.value })}
+                placeholder="If not sure, politely send the customer to WhatsApp human support."
+              />
+              <p className="text-[10px] text-slate-400 font-semibold mt-1">
+                Used when CSR-AI does not have enough information or should not answer directly.
+              </p>
+            </div>
+          </div>
+
           <div className="text-right">
             <button
               onClick={handleSavePlugins}

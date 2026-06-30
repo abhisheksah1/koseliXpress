@@ -135,7 +135,8 @@ export default function App() {
 
     const path = window.location.pathname.replace(/^\/+|\/+$/g, '');
     if (!path || path === 'home' || path === 'page/home' || path === 'pages/home') {
-      setCurrentSlug('home');
+      const landingSlug = dbState?.store?.landingPageSlug || 'home';
+      setCurrentSlug(landingSlug);
       setSelectedCategoryFilter('');
       setSelectedBrandFilter('');
       setCatalogSearch('');
@@ -1116,14 +1117,15 @@ export default function App() {
   };
 
   const navigateToSlug = (slug: string) => {
-    const cleanSlug = (slug || 'home').replace(/^pages?\//, '').replace(/^\/+/, '') || 'home';
+    const requestedSlug = (slug || 'home').replace(/^pages?\//, '').replace(/^\/+/, '') || 'home';
+    const cleanSlug = requestedSlug === 'home' ? (dbState.store?.landingPageSlug || 'home') : requestedSlug;
     setCurrentSlug(cleanSlug);
     setSelectedCategoryFilter('');
     setSelectedBrandFilter('');
     setCatalogSearch('');
     setSelectedProductIdDetails(null);
     setCustomerProductPage(1);
-    const nextPath = cleanSlug === 'home' ? '/' : `/${cleanSlug}`;
+    const nextPath = requestedSlug === 'home' || cleanSlug === (dbState.store?.landingPageSlug || 'home') ? '/' : `/${cleanSlug}`;
     if (window.location.pathname !== nextPath) {
       window.history.pushState({}, '', nextPath);
     }
@@ -1141,9 +1143,26 @@ export default function App() {
     }
   };
 
+  const handleNavbarSearchChange = (value: string) => {
+    setCatalogSearch(value);
+    setCustomerProductPage(1);
+
+    if (value.trim()) {
+      setSelectedProductIdDetails(null);
+      setSelectedCategoryFilter('');
+      setSelectedBrandFilter('');
+      setCurrentSlug('catalog');
+      if (window.location.pathname !== '/catalog') {
+        window.history.pushState({}, '', '/catalog');
+      }
+    }
+  };
+
   // Switch dynamic layouts based on resolving active slug
   const activePageConfig = dbState.pages.find(p => p.slug === currentSlug);
   const isCatalogView = currentSlug === 'catalog' || !!selectedCategoryFilter || !!selectedBrandFilter || !!catalogSearch;
+  const landingPageSlug = dbState.store?.landingPageSlug || 'home';
+  const isLandingPageView = currentSlug === landingPageSlug;
 
   const normalizeCategoryKey = (value?: string) => (value || '').trim().toLowerCase();
   const getCategoryMatchKeys = (categoryIdOrSlug: string) => {
@@ -1199,7 +1218,27 @@ export default function App() {
       ? productMatchesSelectedCategory(p, selectedCategoryFilter)
       : true;
     const matchesBrand = selectedBrandFilter ? p.brandId === selectedBrandFilter : true;
-    const matchesSearch = p.name.toLowerCase().includes(catalogSearch.toLowerCase()) || p.sku.toLowerCase().includes(catalogSearch.toLowerCase());
+    const searchTerm = normalizeCategoryKey(catalogSearch);
+    const productCategoryNames = [p.categoryId, ...(p.categoryIds || [])]
+      .map(categoryValue => dbState.categories.find(cat => cat.id === categoryValue || cat.slug === categoryValue)?.name || categoryValue)
+      .filter(Boolean);
+    const productBrandName = dbState.brands.find(brand => brand.id === p.brandId)?.name || '';
+    const searchableValues = [
+      p.name,
+      p.sku,
+      p.slug,
+      p.description,
+      p.longDescription,
+      p.metaTitle,
+      p.metaDescription,
+      p.metaKeywords,
+      p.group,
+      p.variant,
+      p.size,
+      productBrandName,
+      ...productCategoryNames,
+    ];
+    const matchesSearch = !searchTerm || searchableValues.some(value => normalizeCategoryKey(String(value || '')).includes(searchTerm));
     return matchesCategory && matchesBrand && matchesSearch;
   });
 
@@ -1692,7 +1731,7 @@ export default function App() {
             onNavigateToSlug={navigateToSlug}
             currentSlug={currentSlug}
             searchQuery={catalogSearch}
-            onSearchChange={setCatalogSearch}
+            onSearchChange={handleNavbarSearchChange}
             customerUser={customerUser}
             onLogoutCustomer={() => {
               setCustomerUser(null);
@@ -1714,7 +1753,7 @@ export default function App() {
             <main className={`flex-grow w-full ${
               selectedProductIdDetails
                 ? 'max-w-none px-0 py-0'
-                : currentSlug === 'home' && activePageConfig && !isCatalogView
+                : isLandingPageView && activePageConfig && !isCatalogView
                 ? 'max-w-none px-0 py-0'
                 : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8'
             }`}>
@@ -1738,9 +1777,9 @@ export default function App() {
                 />
               ) : activePageConfig && !isCatalogView ? (
               /* RENDER VISUAL LAYOUT DRAFT FROM PAGE BUILDER SCHEMA */
-              <div className={currentSlug === 'home' ? 'space-y-0' : 'space-y-12'}>
-                {/* Visual header for non-home custom pages */}
-                {currentSlug !== 'home' && (
+              <div className={isLandingPageView ? 'space-y-0' : 'space-y-12'}>
+                {/* Visual header for non-landing custom pages */}
+                {!isLandingPageView && (
                   <div className="text-left pb-4 border-b border-white/5">
                     <h1 className="text-3xl font-serif italic text-white tracking-wide">{activePageConfig.title}</h1>
                   </div>

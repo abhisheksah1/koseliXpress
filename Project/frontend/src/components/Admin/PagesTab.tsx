@@ -524,31 +524,62 @@ export default function PagesTab({ state, onUpdateState }: PagesTabProps) {
           </div>
         </div>
 
-        <div className="flex gap-1.5 p-1 bg-slate-100 rounded-xl shrink-0">
-          <button
-            type="button"
-            onClick={() => setActiveMenu('pages')}
-            className={`px-4 py-2 text-xs font-bold rounded-lg transition ${
-              activeMenu === 'pages'
-                ? 'bg-white text-slate-800 shadow-sm'
-                : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            <Layers className="w-3.5 h-3.5 inline mr-1.5 -mt-0.5" />
-            Pages
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveMenu('navbar')}
-            className={`px-4 py-2 text-xs font-bold rounded-lg transition ${
-              activeMenu === 'navbar'
-                ? 'bg-white text-slate-800 shadow-sm'
-                : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            <Navigation className="w-3.5 h-3.5 inline mr-1.5 -mt-0.5" />
-            Navigation
-          </button>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 shrink-0">
+          <div className="min-w-[240px]">
+            <label className="block text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">
+              Website Landing Page
+            </label>
+            <select
+              value={state.store?.landingPageSlug || 'home'}
+              onChange={(e) => {
+                onUpdateState({
+                  ...state,
+                  store: {
+                    ...state.store,
+                    landingPageSlug: e.target.value,
+                  },
+                });
+                showSavedMessage();
+              }}
+              className="w-full px-3 py-2 text-xs font-bold bg-pink-50 border border-pink-100 rounded-xl text-slate-700 focus:outline-none focus:ring-2 focus:ring-pink-100 cursor-pointer"
+            >
+              <option value="home">Default Home Page</option>
+              {state.pages
+                .filter(page => page.status === 'active')
+                .map(page => (
+                  <option key={`landing-page-${page.id}`} value={page.slug}>
+                    {page.title} ({page.slug})
+                  </option>
+                ))}
+            </select>
+          </div>
+
+          <div className="flex gap-1.5 p-1 bg-slate-100 rounded-xl">
+            <button
+              type="button"
+              onClick={() => setActiveMenu('pages')}
+              className={`px-4 py-2 text-xs font-bold rounded-lg transition ${
+                activeMenu === 'pages'
+                  ? 'bg-white text-slate-800 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5 inline mr-1.5 -mt-0.5" />
+              Pages
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveMenu('navbar')}
+              className={`px-4 py-2 text-xs font-bold rounded-lg transition ${
+                activeMenu === 'navbar'
+                  ? 'bg-white text-slate-800 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <Navigation className="w-3.5 h-3.5 inline mr-1.5 -mt-0.5" />
+              Navigation
+            </button>
+          </div>
         </div>
       </div>
 

@@ -3,6 +3,7 @@ import { createDefaultState } from './defaultState';
 import { buildEnvAdminUser, getEnvAdminCredentials } from './utils/adminAuth';
 
 export const DB_KEY = 'koseli_xpress_db';
+const DB_META_KEY = `${DB_KEY}_meta`;
 
 let pendingPersistState: DatabaseState | null = null;
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
@@ -84,30 +85,27 @@ function readLocalDbState(): DatabaseState | null {
   }
 }
 
+function readLocalSaveMeta(): { savedAt?: number } {
+  try {
+    return JSON.parse(localStorage.getItem(DB_META_KEY) || '{}') as { savedAt?: number };
+  } catch {
+    return {};
+  }
+}
+
 function mergeLocalAdminEdits(remote: DatabaseState, local: DatabaseState | null): { state: DatabaseState; changed: boolean } {
   if (!local) return { state: remote, changed: false };
 
   let changed = false;
   const merged: DatabaseState = { ...remote };
+  const localSavedAt = readLocalSaveMeta().savedAt || 0;
+  const localWasJustSaved = Date.now() - localSavedAt < 2 * 60 * 1000;
 
-  const mergedPages = [...(remote.pages || [])];
-  for (const localPage of local.pages || []) {
-    const remoteIndex = mergedPages.findIndex(page => page.slug === localPage.slug || page.id === localPage.id);
-    if (remoteIndex < 0) {
-      mergedPages.push(localPage);
-      changed = true;
-      continue;
-    }
-
-    const remotePage = mergedPages[remoteIndex];
-    const localPageJson = JSON.stringify(localPage);
-    const remotePageJson = JSON.stringify(remotePage);
-    if (localPageJson !== remotePageJson && pageScore(localPage) >= pageScore(remotePage)) {
-      mergedPages[remoteIndex] = localPage;
-      changed = true;
-    }
+  if (localWasJustSaved && JSON.stringify(local.pages || []) !== JSON.stringify(remote.pages || [])) {
+    // Fresh admin edits should win over stale remote reads, including page/section deletions.
+    merged.pages = local.pages || [];
+    changed = true;
   }
-  if (changed) merged.pages = mergedPages;
 
   const localNavCount = local.appearance?.navbarLinks?.length || 0;
   const remoteNavCount = remote.appearance?.navbarLinks?.length || 0;
@@ -119,11 +117,18 @@ function mergeLocalAdminEdits(remote: DatabaseState, local: DatabaseState | null
     changed = true;
   }
 
-  const localProductCount = local.products?.length || 0;
-  const remoteProductCount = remote.products?.length || 0;
-  if (localProductCount > remoteProductCount) {
+  if (localWasJustSaved && JSON.stringify(local.products || []) !== JSON.stringify(remote.products || [])) {
+    // Product deletes are soft deletes (status changes), so count-based recovery can resurrect them.
+    // A fresh admin save must win until the backend store catches up.
     merged.products = local.products;
     changed = true;
+  } else {
+    const localProductCount = local.products?.length || 0;
+    const remoteProductCount = remote.products?.length || 0;
+    if (localProductCount > remoteProductCount) {
+      merged.products = local.products;
+      changed = true;
+    }
   }
 
   const localCategoryCount = local.categories?.length || 0;
@@ -374,6 +379,7 @@ export function getDbState(): DatabaseState {
 
 export function saveDbState(state: DatabaseState) {
   localStorage.setItem(DB_KEY, JSON.stringify(state));
+  localStorage.setItem(DB_META_KEY, JSON.stringify({ savedAt: Date.now() }));
   schedulePersistToMongoDB(state);
 }
 
