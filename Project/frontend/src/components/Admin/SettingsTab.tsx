@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { DatabaseState, CurrencySettings, ServiceFee, PluginSettings, StoreSettings, UserRole, Role, DeliveryDistrict, PaymentGateway, DeliveryGroup, RolePermissions, PreferredDeliveryTimeSlotSettings, DeliveryTimeSlot, CustomerAuthConfig, StaffRoleCategory } from '../../types';
-import { Save, Globe, Shield, CreditCard, Sparkles, UserCheck, Trash2, Sliders, MapPin, Settings, Server, Key, Landmark, CheckSquare, Square, Upload, FileText, Eye, EyeOff, RefreshCw, Building, Clock, ArrowUp, ArrowDown, Mail, Send, History, PlayCircle, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Save, Globe, Shield, CreditCard, Sparkles, UserCheck, Trash2, Sliders, MapPin, Settings, Server, Key, Landmark, CheckSquare, Square, Upload, FileText, Eye, EyeOff, RefreshCw, Building, Clock, ArrowUp, ArrowDown, Mail, Send, History, PlayCircle, CheckCircle2, AlertCircle, MessageSquare } from 'lucide-react';
 import { syncPaymentGateways, testPaymentGateway } from '../../utils/paymentHelpers';
 import {
   CHECKOUT_PAYMENT_SLOTS,
@@ -14,7 +14,7 @@ interface SettingsTabProps {
 }
 
 export default function SettingsTab({ state, onUpdateState }: SettingsTabProps) {
-  const [activeSubMenu, setActiveSubMenu] = useState<'store' | 'roles' | 'currencies' | 'fees' | 'plugins' | 'delivery' | 'gateways' | 'branding' | 'compliance' | 'time_slots' | 'users' | 'emails' | 'customer_auth'>('store');
+  const [activeSubMenu, setActiveSubMenu] = useState<'store' | 'roles' | 'currencies' | 'fees' | 'plugins' | 'ai_chat' | 'delivery' | 'gateways' | 'branding' | 'compliance' | 'time_slots' | 'users' | 'emails' | 'customer_auth'>('store');
   const defaultPerms: Record<string, RolePermissions> = {
     [Role.ADMIN]: { orderProcess: true, accounts: true, productEdit: true, purchaseEntry: true, systemSettings: true },
     [Role.MANAGER]: { orderProcess: true, accounts: false, productEdit: true, purchaseEntry: true, systemSettings: false },
@@ -803,6 +803,12 @@ export default function SettingsTab({ state, onUpdateState }: SettingsTabProps) 
             className={`px-3 py-1.5 rounded transition ${activeSubMenu === 'plugins' ? 'bg-white text-rose-700' : 'text-slate-500'}`}
           >
             Plugins Config
+          </button>
+          <button
+            onClick={() => setActiveSubMenu('ai_chat')}
+            className={`px-3 py-1.5 rounded transition ${activeSubMenu === 'ai_chat' ? 'bg-indigo-600 text-white font-extrabold shadow-sm' : 'text-slate-500 hover:text-slate-850'}`}
+          >
+            CSR-AI Support
           </button>
           <button
             onClick={() => setActiveSubMenu('branding')}
@@ -2343,6 +2349,69 @@ export default function SettingsTab({ state, onUpdateState }: SettingsTabProps) 
             <span>Third-Party analytical & WhatsApp integrations</span>
           </div>
 
+          <div className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-4 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-1.5 font-black text-slate-800 text-xs uppercase tracking-wider">
+                  <MessageSquare className="w-4 h-4 text-indigo-600" />
+                  AI Chat Support Availability
+                </div>
+                <p className="text-[10.5px] text-slate-500 font-semibold mt-1">
+                  Control whether the customer-side CSR-AI support button is visible, or show it only during selected support hours.
+                </p>
+              </div>
+              <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                  {pluginForm.aiChatEnabled !== false ? 'Enabled' : 'Disabled'}
+                </span>
+                <input
+                  type="checkbox"
+                  checked={pluginForm.aiChatEnabled !== false}
+                  onChange={(e) => setPluginForm({ ...pluginForm, aiChatEnabled: e.target.checked })}
+                  className="sr-only peer"
+                />
+                <div className={`w-10 h-5 rounded-full transition-colors relative after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all ${
+                  pluginForm.aiChatEnabled !== false ? 'bg-indigo-600 after:translate-x-5' : 'bg-slate-300'
+                }`}></div>
+              </label>
+            </div>
+
+            <div className={`grid grid-cols-1 md:grid-cols-3 gap-3 text-xs ${pluginForm.aiChatEnabled === false ? 'opacity-45 pointer-events-none' : ''}`}>
+              <label className="flex items-center gap-2 p-3 rounded-lg border border-white/70 bg-white cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={!!pluginForm.aiChatScheduleEnabled}
+                  onChange={(e) => setPluginForm({ ...pluginForm, aiChatScheduleEnabled: e.target.checked })}
+                  className="w-4 h-4 accent-indigo-600"
+                />
+                <span>
+                  <span className="block text-[10px] font-black uppercase tracking-wider text-slate-600">Use Time Schedule</span>
+                  <span className="block text-[9.5px] text-slate-400 font-semibold">Off means AI chat shows 24/7.</span>
+                </span>
+              </label>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Start Time</label>
+                <input
+                  type="time"
+                  className="w-full p-2.5 border bg-white rounded-lg text-xs font-mono"
+                  value={pluginForm.aiChatStartTime || '09:00'}
+                  disabled={!pluginForm.aiChatScheduleEnabled}
+                  onChange={(e) => setPluginForm({ ...pluginForm, aiChatStartTime: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">End Time</label>
+                <input
+                  type="time"
+                  className="w-full p-2.5 border bg-white rounded-lg text-xs font-mono"
+                  value={pluginForm.aiChatEndTime || '18:00'}
+                  disabled={!pluginForm.aiChatScheduleEnabled}
+                  onChange={(e) => setPluginForm({ ...pluginForm, aiChatEndTime: e.target.value })}
+                />
+              </div>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
             <div>
               <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">WhatsApp Helpdesk Support Contact</label>
@@ -2420,6 +2489,100 @@ export default function SettingsTab({ state, onUpdateState }: SettingsTabProps) 
               className="px-5 py-2.5 font-bold text-xs bg-rose-600 hover:bg-rose-700 text-white rounded-lg shadow-sm inline-flex items-center gap-1.5 cursor-pointer"
             >
               <Save className="w-4 h-4" /> Save Plugin Configurations
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* CSR-AI CUSTOMER SUPPORT AVAILABILITY */}
+      {activeSubMenu === 'ai_chat' && (
+        <div className="bg-white border border-indigo-100 rounded-xl p-5 space-y-5">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="w-11 h-11 rounded-2xl bg-indigo-50 text-indigo-650 flex items-center justify-center shrink-0">
+                <MessageSquare className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-slate-900 tracking-tight">CSR-AI Support Live Settings</h3>
+                <p className="text-xs text-slate-500 font-semibold leading-relaxed mt-1 max-w-2xl">
+                  Enable, disable, or schedule the customer-side CSR-AI support chat button. This controls only the AI chat launcher. WhatsApp human support remains separate.
+                </p>
+              </div>
+            </div>
+
+            <label className="inline-flex items-center justify-between gap-4 rounded-2xl border border-indigo-100 bg-indigo-50 px-4 py-3 cursor-pointer min-w-[220px]">
+              <span>
+                <span className="block text-[10px] font-black uppercase tracking-widest text-slate-500">Customer AI Chat</span>
+                <span className={`block text-sm font-black ${pluginForm.aiChatEnabled !== false ? 'text-emerald-650' : 'text-rose-600'}`}>
+                  {pluginForm.aiChatEnabled !== false ? 'Enabled' : 'Disabled'}
+                </span>
+              </span>
+              <input
+                type="checkbox"
+                checked={pluginForm.aiChatEnabled !== false}
+                onChange={(e) => setPluginForm({ ...pluginForm, aiChatEnabled: e.target.checked })}
+                className="sr-only"
+              />
+              <span className={`w-12 h-6 rounded-full transition-colors relative after:content-[''] after:absolute after:top-[3px] after:left-[3px] after:bg-white after:rounded-full after:h-4.5 after:w-4.5 after:transition-all ${
+                pluginForm.aiChatEnabled !== false ? 'bg-emerald-600 after:translate-x-6' : 'bg-slate-300'
+              }`} />
+            </label>
+          </div>
+
+          <div className={`grid grid-cols-1 lg:grid-cols-3 gap-4 text-xs ${pluginForm.aiChatEnabled === false ? 'opacity-50 pointer-events-none' : ''}`}>
+            <label className="rounded-2xl border border-slate-150 bg-slate-50 p-4 flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={!!pluginForm.aiChatScheduleEnabled}
+                onChange={(e) => setPluginForm({ ...pluginForm, aiChatScheduleEnabled: e.target.checked })}
+                className="mt-0.5 w-4 h-4 accent-indigo-600"
+              />
+              <span>
+                <span className="block text-[11px] font-black text-slate-800 uppercase tracking-wider">Use Time Schedule</span>
+                <span className="block text-[10px] text-slate-500 font-semibold leading-relaxed mt-1">
+                  If off, CSR-AI support appears 24/7. If on, it appears only inside the selected time range.
+                </span>
+              </span>
+            </label>
+
+            <div>
+              <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">AI Chat Start Time</label>
+              <input
+                type="time"
+                className="w-full p-3 border border-slate-200 bg-white rounded-xl text-sm font-mono disabled:bg-slate-100 disabled:text-slate-400"
+                value={pluginForm.aiChatStartTime || '09:00'}
+                disabled={!pluginForm.aiChatScheduleEnabled}
+                onChange={(e) => setPluginForm({ ...pluginForm, aiChatStartTime: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">AI Chat End Time</label>
+              <input
+                type="time"
+                className="w-full p-3 border border-slate-200 bg-white rounded-xl text-sm font-mono disabled:bg-slate-100 disabled:text-slate-400"
+                value={pluginForm.aiChatEndTime || '18:00'}
+                disabled={!pluginForm.aiChatScheduleEnabled}
+                onChange={(e) => setPluginForm({ ...pluginForm, aiChatEndTime: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <div className="rounded-xl bg-slate-50 border border-slate-100 p-4 text-xs text-slate-600 font-semibold leading-relaxed">
+            Current behavior: CSR-AI is <strong>{pluginForm.aiChatEnabled !== false ? 'enabled' : 'disabled'}</strong>
+            {pluginForm.aiChatEnabled !== false && pluginForm.aiChatScheduleEnabled
+              ? ` and scheduled from ${pluginForm.aiChatStartTime || '09:00'} to ${pluginForm.aiChatEndTime || '18:00'}.`
+              : pluginForm.aiChatEnabled !== false
+                ? ' and visible 24/7.'
+                : '.'}
+          </div>
+
+          <div className="text-right">
+            <button
+              onClick={handleSavePlugins}
+              className="px-5 py-2.5 font-bold text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-sm inline-flex items-center gap-1.5 cursor-pointer"
+            >
+              <Save className="w-4 h-4" /> Save CSR-AI Support Settings
             </button>
           </div>
         </div>

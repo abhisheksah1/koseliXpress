@@ -385,6 +385,10 @@ export interface PluginSettings {
   facebookPixelId: string;
   whatsappIconType?: 'whatsapp' | 'message-circle' | 'message-square' | 'phone' | 'custom-svg';
   whatsappCustomSvg?: string;
+  aiChatEnabled?: boolean;
+  aiChatScheduleEnabled?: boolean;
+  aiChatStartTime?: string;
+  aiChatEndTime?: string;
 }
 
 export interface AppearanceSettings {

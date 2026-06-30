@@ -27,6 +27,31 @@ export default function SupportHub({ state, onUpdateState, onAddToCart, onOpenCa
   // activePanel: 'ai' | null
   const [activePanel, setActivePanel] = useState<'ai' | null>(null);
 
+  const isTimeWithinWindow = (startTime?: string, endTime?: string) => {
+    if (!startTime || !endTime) return true;
+    const [startHour, startMinute] = startTime.split(':').map(Number);
+    const [endHour, endMinute] = endTime.split(':').map(Number);
+    if ([startHour, startMinute, endHour, endMinute].some(Number.isNaN)) return true;
+
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    const startMinutes = startHour * 60 + startMinute;
+    const endMinutes = endHour * 60 + endMinute;
+
+    if (startMinutes === endMinutes) return true;
+    if (startMinutes < endMinutes) {
+      return currentMinutes >= startMinutes && currentMinutes <= endMinutes;
+    }
+    return currentMinutes >= startMinutes || currentMinutes <= endMinutes;
+  };
+
+  const aiChatEnabled = state.plugins?.aiChatEnabled !== false;
+  const aiChatScheduled = !!state.plugins?.aiChatScheduleEnabled;
+  const isAiChatAvailable = aiChatEnabled && (
+    !aiChatScheduled ||
+    isTimeWithinWindow(state.plugins?.aiChatStartTime || '09:00', state.plugins?.aiChatEndTime || '18:00')
+  );
+
   // Chat Session ID linked to sessionStorage so it persists across refreshes
   const [chatSessionId] = useState(() => {
     let id = sessionStorage.getItem('koseli_chat_session_id');
@@ -141,6 +166,12 @@ export default function SupportHub({ state, onUpdateState, onAddToCart, onOpenCa
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages, isLoading]);
+
+  useEffect(() => {
+    if (!isAiChatAvailable && activePanel === 'ai') {
+      setActivePanel(null);
+    }
+  }, [activePanel, isAiChatAvailable]);
 
   const handleSendMessage = async (textToSend: string) => {
     if (!textToSend.trim() || isLoading) return;
@@ -384,7 +415,7 @@ export default function SupportHub({ state, onUpdateState, onAddToCart, onOpenCa
       
       {/* ----------------- INTERACTIVE DRAWERS ----------------- */}
       <AnimatePresence>
-        {activePanel === 'ai' && (
+        {isAiChatAvailable && activePanel === 'ai' && (
           <motion.div
             initial={{ opacity: 0, scale: 0.92, y: 30 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -602,11 +633,12 @@ export default function SupportHub({ state, onUpdateState, onAddToCart, onOpenCa
       <div className="flex flex-col gap-2.5 select-none pointer-events-auto">
         
         {/* LAUNCHER 1: KOSELI XPRESS - AI Support */}
+        {isAiChatAvailable && (
         <div className="relative group flex items-center justify-end">
           {/* Hover-only Tooltip Label (No autoplay pop) */}
           {activePanel !== 'ai' && (
             <span className="absolute right-18 scale-0 group-hover:scale-100 transition-all origin-right bg-slate-950 text-white text-[10.5px] font-black py-1.5 px-3 rounded-xl whitespace-nowrap shadow-lg pointer-events-none tracking-wide z-20">
-              💬 CSR-AI Support Live (24/7)
+              {aiChatScheduled ? 'CSR-AI Support Live Now' : 'CSR-AI Support Live (24/7)'}
             </span>
           )}
           
@@ -643,11 +675,12 @@ export default function SupportHub({ state, onUpdateState, onAddToCart, onOpenCa
             
             {activePanel !== 'ai' && (
               <span className="absolute -top-1 -right-1 px-1.5 py-0.5 text-white font-black rounded-lg text-[7px] shadow uppercase tracking-wider scale-95 select-none border border-white/30" style={{ backgroundColor: secondaryColor }}>
-                AI 24/7
+                {aiChatScheduled ? 'AI LIVE' : 'AI 24/7'}
               </span>
             )}
           </button>
         </div>
+        )}
 
         {/* LAUNCHER 2: WhatsApp Live human chat */}
         <div className="relative group flex items-center justify-end">

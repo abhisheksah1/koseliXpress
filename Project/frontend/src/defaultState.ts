@@ -48,6 +48,10 @@ export function createDefaultState(): DatabaseState {
       facebookPixelId: '',
       whatsappIconType: 'whatsapp',
       whatsappCustomSvg: '',
+      aiChatEnabled: true,
+      aiChatScheduleEnabled: false,
+      aiChatStartTime: '09:00',
+      aiChatEndTime: '18:00',
     },
     appearance: {
       themeMode: 'light',
